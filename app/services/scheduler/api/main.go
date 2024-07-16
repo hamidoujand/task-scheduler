@@ -48,10 +48,6 @@ func run() error {
 		return fmt.Errorf("parsing config: %w", err)
 	}
 
-	cfg, err := conf.String(&configs)
-	if err != nil {
-		return fmt.Errorf("stringify configs: %w", err)
-	}
 	//==========================================================================
 	//setup logger
 	isProd := configs.API.Environment == "production"
@@ -62,8 +58,6 @@ func run() error {
 	}
 
 	logger := logger.NewCustomLogger(slog.LevelInfo, isProd, attrs...)
-
-	logger.Info("configurations", "configs", cfg)
 
 	//==========================================================================
 	//server

@@ -4,3 +4,6 @@ run:
 tidy:
 	go mod tidy 
 	go mod vendor 	
+
+help:
+	go run app/services/scheduler/api/main.go --help
