@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 )
 
+// NewCustomLogger is going to setup a *slog.Logger and return it.
 func NewCustomLogger(level slog.Level, isProd bool, attrs ...slog.Attr) *slog.Logger {
 	//setup logger
 	replacer := func(groups []string, a slog.Attr) slog.Attr {
@@ -42,6 +43,8 @@ func NewCustomLogger(level slog.Level, isProd bool, attrs ...slog.Attr) *slog.Lo
 
 }
 
+// customLogHandler is a type that represent a custom logger that is able to base
+// on environment switch it's handler
 type customLogHandler struct {
 	jsonHandler slog.Handler
 	textHandler slog.Handler
