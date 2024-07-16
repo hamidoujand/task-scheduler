@@ -20,7 +20,7 @@ func NewCustomLogger(level slog.Level, isProd bool, attrs ...slog.Attr) *slog.Lo
 				functionName := Source.Function
 				return slog.Attr{
 					Key:   slog.SourceKey,
-					Value: slog.StringValue(fmt.Sprintf("%s() line:%s:%d", functionName, filename, line)),
+					Value: slog.StringValue(fmt.Sprintf("%s() file:%s:%d", functionName, filename, line)),
 				}
 			}
 			return a
