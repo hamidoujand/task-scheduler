@@ -17,10 +17,9 @@ func NewCustomLogger(level slog.Level, isProd bool, attrs ...slog.Attr) *slog.Lo
 			if Source, ok := a.Value.Any().(*slog.Source); ok {
 				filename := filepath.Base(Source.File)
 				line := Source.Line
-				functionName := Source.Function
 				return slog.Attr{
 					Key:   slog.SourceKey,
-					Value: slog.StringValue(fmt.Sprintf("%s() file:%s:%d", functionName, filename, line)),
+					Value: slog.StringValue(fmt.Sprintf("file:%s:%d", filename, line)),
 				}
 			}
 			return a
