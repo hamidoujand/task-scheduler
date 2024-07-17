@@ -14,7 +14,6 @@ import (
 	"github.com/ardanlabs/conf/v3"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/handlers"
 	"github.com/hamidoujand/task-scheduler/foundation/logger"
-	"github.com/hamidoujand/task-scheduler/foundation/web"
 )
 
 // will be changed from build tags
@@ -69,7 +68,7 @@ func run() error {
 
 	signal.Notify(shutdownCh, syscall.SIGTERM, syscall.SIGINT)
 
-	app := web.NewApp(shutdownCh)
+	app := handlers.RegisterRoutes(shutdownCh, logger)
 
 	srv := http.Server{
 		Addr:        configs.API.Host,
@@ -78,7 +77,6 @@ func run() error {
 		ErrorLog:    slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
 	logger.Info("mux", "status", "registering routes to the mux")
-	handlers.RegisterRoutes(app)
 	//server start
 	go func() {
 		logger.Info("server", "status", "started", "host", configs.API.Host, "environment", configs.API.Environment)
