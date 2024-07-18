@@ -11,7 +11,10 @@ import (
 )
 
 func RegisterRoutes(shutdown chan os.Signal, logger *slog.Logger) *web.App {
-	app := web.NewApp(shutdown, mid.Logger(logger))
+	app := web.NewApp(shutdown,
+		mid.Logger(logger),
+		mid.Errors(logger),
+	)
 
 	taskHandler := tasks.Handler{}
 
