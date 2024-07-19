@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ardanlabs/conf/v3"
+	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/handlers"
 	"github.com/hamidoujand/task-scheduler/foundation/logger"
 )
@@ -61,6 +62,13 @@ func run() error {
 	logger := logger.NewCustomLogger(slog.LevelInfo, isProd, attrs...)
 
 	//==========================================================================
+	//validator
+	appValidator, err := errs.NewAppValidator()
+	if err != nil {
+		return fmt.Errorf("creating app validator: %w", err)
+	}
+	logger.Info("application validator", "status", "successfully initialized")
+	//==========================================================================
 	//server
 
 	serverErrors := make(chan error, 1)
@@ -68,7 +76,7 @@ func run() error {
 
 	signal.Notify(shutdownCh, syscall.SIGTERM, syscall.SIGINT)
 
-	app := handlers.RegisterRoutes(shutdownCh, logger)
+	app := handlers.RegisterRoutes(shutdownCh, logger, appValidator)
 
 	srv := http.Server{
 		Addr:        configs.API.Host,

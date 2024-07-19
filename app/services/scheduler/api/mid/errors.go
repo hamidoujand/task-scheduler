@@ -2,6 +2,7 @@ package mid
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -17,29 +18,28 @@ func Errors(logger *slog.Logger) web.Middleware {
 			err := h(ctx, w, r)
 
 			if err != nil {
+				var appErr *errs.AppError
+				if errors.As(err, &appErr) {
+					// handle err
+					logger.Error("handling error during request",
+						"message", appErr.Message,
+						"sourceFile", filepath.Base(appErr.FileName),
+						"functionName", filepath.Base(appErr.FuncName),
+					)
 
-				appErr, ok := err.(*errs.AppError)
+					// after logging change the message to internal server error
+					if appErr.Code == http.StatusInternalServerError {
+						appErr.Message = http.StatusText(http.StatusInternalServerError)
+					}
 
-				if !ok {
-					return errs.NewAppErrorf(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+					// send response to client
+					if err := web.Respond(ctx, w, appErr.Code, appErr); err != nil {
+						return errs.NewAppErrorf(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+					}
 				}
 
-				//handle err
-				logger.Error("handling error during request",
-					"message", appErr.Message,
-					"sourceFile", filepath.Base(appErr.FileName),
-					"functionName", filepath.Base(appErr.FuncName),
-				)
+				return errs.NewAppErrorf(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
-				//after logging change the message to internal server error
-				if appErr.Code == http.StatusInternalServerError {
-					appErr.Message = http.StatusText(http.StatusInternalServerError)
-				}
-
-				//send response to client
-				if err := web.Respond(ctx, w, appErr.Code, appErr); err != nil {
-					return errs.NewAppErrorf(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-				}
 			}
 
 			//no err

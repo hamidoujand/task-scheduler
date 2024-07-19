@@ -7,13 +7,13 @@ import (
 	"runtime"
 )
 
-// TODO add "fieldsError map" and all logic for model validation
 // AppError represents a trusted error inside the system
 type AppError struct {
-	Code     int    `json:"code"`
-	Message  string `json:"message"`
-	FuncName string `json:"-"`
-	FileName string `json:"-"`
+	Code     int               `json:"code"`
+	Message  string            `json:"message"`
+	FuncName string            `json:"-"`
+	FileName string            `json:"-"`
+	Fields   map[string]string `json:"fields,omitempty"`
 }
 
 func (err *AppError) Error() string {
@@ -43,5 +43,18 @@ func NewAppErrorf(code int, format string, v ...any) error {
 		Message:  fmt.Sprintf(format, v...),
 		FuncName: funcName,
 		FileName: fmt.Sprintf("%s:%d", filename, line),
+	}
+}
+
+// NewAppValidationError returns an error from failed fields.
+func NewAppValidationError(code int, message string, fields map[string]string) error {
+	pc, filename, line, _ := runtime.Caller(1)
+	funcName := runtime.FuncForPC(pc).Name()
+	return &AppError{
+		Code:     code,
+		Message:  message,
+		FuncName: funcName,
+		FileName: fmt.Sprintf("%s:%d", filename, line),
+		Fields:   fields,
 	}
 }
