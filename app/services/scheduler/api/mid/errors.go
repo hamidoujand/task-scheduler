@@ -10,6 +10,7 @@ import (
 	"github.com/hamidoujand/task-scheduler/foundation/web"
 )
 
+// Errors is a middleware used to do the error handling of the routes.
 func Errors(logger *slog.Logger) web.Middleware {
 	m := func(h web.Handler) web.Handler {
 		handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -29,6 +30,11 @@ func Errors(logger *slog.Logger) web.Middleware {
 					"sourceFile", filepath.Base(appErr.FileName),
 					"functionName", filepath.Base(appErr.FuncName),
 				)
+
+				//after logging change the message to internal server error
+				if appErr.Code == http.StatusInternalServerError {
+					appErr.Message = http.StatusText(http.StatusInternalServerError)
+				}
 
 				//send response to client
 				if err := web.Respond(ctx, w, appErr.Code, appErr); err != nil {
