@@ -14,6 +14,7 @@ func RegisterRoutes(shutdown chan os.Signal, logger *slog.Logger) *web.App {
 	app := web.NewApp(shutdown,
 		mid.Logger(logger),
 		mid.Errors(logger),
+		mid.Panics(),
 	)
 
 	taskHandler := tasks.Handler{}

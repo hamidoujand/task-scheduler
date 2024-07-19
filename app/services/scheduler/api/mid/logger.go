@@ -10,6 +10,7 @@ import (
 	"github.com/hamidoujand/task-scheduler/foundation/web"
 )
 
+// Logger is a middleware, used to log a bare min info around the lifecycle of request.
 func Logger(logger *slog.Logger) web.Middleware {
 	m := func(h web.Handler) web.Handler {
 		handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request) error {

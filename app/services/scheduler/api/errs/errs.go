@@ -7,6 +7,7 @@ import (
 	"runtime"
 )
 
+// TODO add "fieldsError map" and all logic for model validation
 // AppError represents a trusted error inside the system
 type AppError struct {
 	Code     int    `json:"code"`

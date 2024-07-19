@@ -16,7 +16,7 @@ func (h *Handler) CreateTask(ctx context.Context, w http.ResponseWriter, r *http
 
 	err := errors.New("task validation failed")
 	if err != nil {
-		return errs.NewAppError(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		return errs.NewAppError(http.StatusBadRequest, err.Error())
 	}
 
 	msg := map[string]string{
