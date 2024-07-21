@@ -14,6 +14,7 @@ import (
 	"github.com/ardanlabs/conf/v3"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/handlers"
+	"github.com/hamidoujand/task-scheduler/business/database/postgres"
 	"github.com/hamidoujand/task-scheduler/foundation/logger"
 )
 
@@ -37,6 +38,18 @@ func run() error {
 			WriteTimeout    time.Duration `conf:"default:10s"`
 			ShutdownTimeout time.Duration `conf:"default:20s"`
 			Environment     string        `conf:"default:development"`
+		}
+
+		DB struct {
+			User            string        `conf:"default:hamid"`
+			Password        string        `conf:"default:password,mask"`
+			Host            string        `conf:"default:localhost:5432"`
+			Name            string        `conf:"default:postgres"`
+			MaxIdleConns    int           `conf:"default:10"`
+			MaxOpenConns    int           `conf:"default:10"`
+			MaxIdleConnTime time.Duration `conf:"default:5m"`
+			MaxConnLifeTime time.Duration `conf:"default:10m"`
+			DisableTLS      bool          `conf:"default:true"`
 		}
 	}{}
 
@@ -68,6 +81,38 @@ func run() error {
 		return fmt.Errorf("creating app validator: %w", err)
 	}
 	logger.Info("application validator", "status", "successfully initialized")
+	//==========================================================================
+	//database setup
+	logger.Info("database setup", "status", "connecting", "host", configs.DB.Host)
+	client, err := postgres.NewClient(postgres.Config{
+		User:        configs.DB.User,
+		Password:    configs.DB.Password,
+		Host:        configs.DB.Host,
+		Name:        configs.DB.Name,
+		DisableTLS:  configs.DB.DisableTLS,
+		MaxIdleConn: configs.DB.MaxIdleConns,
+		MaxOpenConn: configs.DB.MaxOpenConns,
+		MaxIdleTime: configs.DB.MaxIdleConnTime,
+		MaxLifeTime: configs.DB.MaxConnLifeTime,
+	})
+	if err != nil {
+		return fmt.Errorf("connecting to db: %w", err)
+	}
+	logger.Info("database setup", "status", "checking database engine", "host", configs.DB.Host)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	if err := client.StatusCheck(ctx); err != nil {
+		return fmt.Errorf("status check: %w", err)
+	}
+	logger.Info("database", "status", "status check ran successfully", "host", configs.DB.Host)
+
+	//migrations
+	logger.Info("database", "status", "running migrations", "host", configs.DB.Host)
+	if err := client.Migrate(); err != nil {
+		return fmt.Errorf("running migrations: %w", err)
+	}
+	logger.Info("database", "status", "ready to use")
 	//==========================================================================
 	//server
 
