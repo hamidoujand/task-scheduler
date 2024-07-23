@@ -65,6 +65,7 @@ func (s *Store) Update(ctx context.Context, task task.Task) error {
 		dbTask.Status,
 		dbTask.Result,
 		dbTask.ErrorMessage,
+		dbTask.Id,
 	)
 	if err != nil {
 		return fmt.Errorf("exec context: %w", err)
