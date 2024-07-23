@@ -4,20 +4,46 @@ package docker
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os/exec"
+	"time"
 )
 
 // Container represents the info about the running container.
 type Container struct {
 	Id       string
 	HostPort string
-	Name     string
 }
 
 // StartContainer creates a container out of provided image and assign the name to that container and handles args.
 func StartContainer(image string, name string, port string, dockerArgs []string, imageArgs []string) (Container, error) {
+	//we do 2 retries and another final one outside of the loop
+
+	for i := range 2 {
+		c, err := startContainer(image, name, port, dockerArgs, imageArgs)
+
+		if err == nil {
+			return c, nil
+		}
+
+		//wait few millis
+		time.Sleep(time.Duration(i+1) * 100 * time.Millisecond)
+	}
+
+	return startContainer(image, name, port, dockerArgs, imageArgs)
+}
+
+// StartContainer creates a container out of provided image and assign the name to that container and handles args.
+func startContainer(image string, name string, port string, dockerArgs []string, imageArgs []string) (Container, error) {
+
+	//check to see if already a container with this NAME is running.
+	if c, err := exists(name, port); err == nil {
+		return c, nil
+	}
+
+	//The -P flag tells Docker to publish all exposed ports to random ports on the host.
 	args := []string{"run", "-P", "-d", "--name", name}
 	//append docker args first
 	args = append(args, dockerArgs...)
@@ -45,7 +71,6 @@ func StartContainer(image string, name string, port string, dockerArgs []string,
 	c := Container{
 		Id:       id,
 		HostPort: net.JoinHostPort(host, port),
-		Name:     name,
 	}
 
 	return c, nil
@@ -77,10 +102,22 @@ func (c Container) DumpLogs() []byte {
 	return logs
 }
 
-func extractHostPort(id string, port string) (ip string, boundedPort string, err error) {
-	template := fmt.Sprintf("[{{range $k,$v := (index .NetworkSettings.Ports \"%s/tcp\")}}{{json $v}}{{end}}]", port)
+// NetworkSetting represents the info required from "NetworkSetting" field inside of "docker inspect" result.
+type NetworkSettings struct {
+	Ports map[string][]struct {
+		HostIP   string `json:"hostIp"`
+		HostPort string `json:"HostPort"`
+	} `json:"ports"`
+}
 
-	command := exec.Command("docker", "inspect", "-f", template, id)
+// ContainerInfo is the type represents info we need from "docker inspect" command.
+type ContainerInfo struct {
+	NetworkSettings NetworkSettings `json:"NetworkSettings"`
+}
+
+func extractHostPort(id string, port string) (ip string, boundedPort string, err error) {
+
+	command := exec.Command("docker", "inspect", id)
 	var output bytes.Buffer
 	command.Stdout = &output
 
@@ -88,27 +125,38 @@ func extractHostPort(id string, port string) (ip string, boundedPort string, err
 		return "", "", fmt.Errorf("inspect container %s: %w", id, err)
 	}
 
-	// Got  [{"HostIp":"0.0.0.0","HostPort":"49190"}{"HostIp":"::","HostPort":"49190"}]
-	// Need [{"HostIp":"0.0.0.0","HostPort":"49190"},{"HostIp":"::","HostPort":"49190"}]
-	data := bytes.ReplaceAll(output.Bytes(), []byte("}{"), []byte("},{"))
-
-	var results []struct {
-		HostIp   string
-		HostPort string
+	var containerInfos []ContainerInfo
+	if err := json.Unmarshal(output.Bytes(), &containerInfos); err != nil {
+		return "", "", fmt.Errorf("unmarshal container infos: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &results); err != nil {
-		return "", "", fmt.Errorf("unmarshal data: %w", err)
-	}
+	portKey := port + "/tcp"
+	// since we inspecting by ID only 1 container will be back
+	ports := containerInfos[0].NetworkSettings.Ports[portKey]
 
-	for _, result := range results {
-		if result.HostIp != "::" {
-			if result.HostIp == "" {
+	for _, result := range ports {
+		if result.HostIP != "::" {
+			if result.HostIP == "" {
 				//localhost
 				return "localhost", result.HostPort, nil
 			}
-			return result.HostIp, result.HostPort, nil
+			return result.HostIP, result.HostPort, nil
 		}
 	}
 	return "", "", fmt.Errorf("could not locate ip/port for container %s", id)
+}
+
+// exists check to see if there is already a container with this id running and returns it if there is.
+func exists(id string, port string) (Container, error) {
+	host, port, err := extractHostPort(id, port)
+
+	if err != nil {
+		return Container{}, errors.New("container is not running")
+	}
+
+	c := Container{
+		Id:       id,
+		HostPort: net.JoinHostPort(host, port),
+	}
+	return c, nil
 }
