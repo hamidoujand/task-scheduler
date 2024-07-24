@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/go-playground/locales/en"
@@ -38,6 +39,10 @@ func NewAppValidator() (*AppValidator, error) {
 		return name
 	})
 
+	//register custom validators
+	v.RegisterValidation("commonCommands", commonCommands)
+	v.RegisterValidation("commonArgs", validCommandArgs)
+
 	return &AppValidator{
 		validate:   v,
 		translator: translator,
@@ -57,13 +62,42 @@ func (av *AppValidator) Check(val any) (map[string]string, bool) {
 			return nil, false
 		}
 
+		customValidatorsErrMsg := map[string]string{
+			"Command.commonCommands": "command is not supported in this system",
+			"Args.commonArgs":        "provided args contains invalid chars",
+		}
+
 		fields := make(map[string]string, len(vErrs))
 
 		for _, vErr := range vErrs {
-			fields[vErr.Field()] = vErr.Translate(av.translator)
+			fieldName := fmt.Sprintf("%s.%s", vErr.StructField(), vErr.Tag())
+			fmt.Println(fieldName)
+			msg, ok := customValidatorsErrMsg[fieldName]
+			if ok {
+				fields[vErr.Field()] = msg
+			} else {
+				fields[vErr.Field()] = vErr.Translate(av.translator)
+			}
 		}
 		return fields, false
 	}
 	//check succeeded
 	return nil, true
+}
+
+//==============================================================================
+// Custom Validators
+
+func commonCommands(field validator.FieldLevel) bool {
+	command := field.Field().String()
+
+	//dangerous commands
+	disallowed := []string{"rm", "shutdown", "format"}
+
+	return !slices.Contains(disallowed, command)
+}
+
+func validCommandArgs(field validator.FieldLevel) bool {
+	args := field.Field().Interface().([]string)
+	return !slices.Contains(args, ";")
 }
