@@ -16,7 +16,6 @@ func Errors(logger *slog.Logger) web.Middleware {
 	m := func(h web.Handler) web.Handler {
 		handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 			err := h(ctx, w, r)
-
 			if err != nil {
 				var appErr *errs.AppError
 				if errors.As(err, &appErr) {
@@ -31,14 +30,14 @@ func Errors(logger *slog.Logger) web.Middleware {
 					if appErr.Code == http.StatusInternalServerError {
 						appErr.Message = http.StatusText(http.StatusInternalServerError)
 					}
-
 					// send response to client
 					if err := web.Respond(ctx, w, appErr.Code, appErr); err != nil {
-						return errs.NewAppErrorf(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+						return errs.NewAppInternalErr(err)
 					}
+					return nil //stop err propagation
 				}
 
-				return errs.NewAppErrorf(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+				return errs.NewAppInternalErr(err)
 
 			}
 
