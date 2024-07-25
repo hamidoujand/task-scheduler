@@ -11,18 +11,18 @@ import (
 )
 
 // Store represents apis used to interact with database.
-type repository struct {
+type Repository struct {
 	client *postgres.Client
 }
 
 // New creates a new store that uses *postgres.Client as its db client
-func NewRepository(clint *postgres.Client) *repository {
-	return &repository{
+func NewRepository(clint *postgres.Client) *Repository {
+	return &Repository{
 		client: clint,
 	}
 }
 
-func (s *repository) Create(ctx context.Context, task task.Task) error {
+func (s *Repository) Create(ctx context.Context, task task.Task) error {
 	const q = `
 	INSERT INTO tasks
 		(id,command,args,status,result,error_msg,scheduled_at,created_at,updated_at)
@@ -48,7 +48,7 @@ func (s *repository) Create(ctx context.Context, task task.Task) error {
 	return nil
 }
 
-func (s *repository) Update(ctx context.Context, task task.Task) error {
+func (s *Repository) Update(ctx context.Context, task task.Task) error {
 	const q = `
 	UPDATE 
 		tasks
@@ -73,7 +73,7 @@ func (s *repository) Update(ctx context.Context, task task.Task) error {
 
 	return nil
 }
-func (s *repository) Delete(ctx context.Context, task task.Task) error {
+func (s *Repository) Delete(ctx context.Context, task task.Task) error {
 	const q = `
 	DELETE FROM
 		tasks
@@ -87,7 +87,7 @@ func (s *repository) Delete(ctx context.Context, task task.Task) error {
 	}
 	return nil
 }
-func (s *repository) GetById(ctx context.Context, taskId uuid.UUID) (task.Task, error) {
+func (s *Repository) GetById(ctx context.Context, taskId uuid.UUID) (task.Task, error) {
 	var dbTask Task
 	const q = `
 	SELECT 
