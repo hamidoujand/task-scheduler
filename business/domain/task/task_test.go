@@ -2,53 +2,18 @@ package task_test
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hamidoujand/task-scheduler/business/domain/task"
+	"github.com/hamidoujand/task-scheduler/business/domain/task/store/memory"
 )
 
-type mockStore struct {
-	tasks map[uuid.UUID]task.Task
-	mu    sync.Mutex
-}
-
-func (ms *mockStore) Create(ctx context.Context, task task.Task) error {
-	ms.mu.Lock()
-	ms.tasks[task.Id] = task
-	ms.mu.Unlock()
-	return nil
-}
-
-func (ms *mockStore) Update(ctx context.Context, task task.Task) error {
-	ms.mu.Lock()
-	ms.tasks[task.Id] = task
-	ms.mu.Unlock()
-	return nil
-}
-func (ms *mockStore) Delete(ctx context.Context, task task.Task) error {
-	ms.mu.Lock()
-	delete(ms.tasks, task.Id)
-	ms.mu.Unlock()
-	return nil
-}
-func (ms *mockStore) GetById(ctx context.Context, taskId uuid.UUID) (task.Task, error) {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-	if tsk, ok := ms.tasks[taskId]; !ok {
-		return task.Task{}, sql.ErrNoRows
-	} else {
-		return tsk, nil
-	}
-}
-
 func TestCreateTask(t *testing.T) {
-	store := mockStore{
-		tasks: make(map[uuid.UUID]task.Task),
+	store := memory.Repository{
+		Tasks: make(map[uuid.UUID]task.Task),
 	}
 
 	service := task.NewService(&store)
@@ -75,8 +40,8 @@ func TestCreateTask(t *testing.T) {
 func TestGetTaskById(t *testing.T) {
 	id := uuid.New()
 	now := time.Now()
-	store := mockStore{
-		tasks: map[uuid.UUID]task.Task{
+	store := memory.Repository{
+		Tasks: map[uuid.UUID]task.Task{
 			id: {
 				Id:          id,
 				Command:     "docker",
@@ -124,8 +89,8 @@ func TestGetTaskById(t *testing.T) {
 func TestDeleteTask(t *testing.T) {
 	id := uuid.New()
 	now := time.Now()
-	store := mockStore{
-		tasks: map[uuid.UUID]task.Task{
+	store := memory.Repository{
+		Tasks: map[uuid.UUID]task.Task{
 			id: {
 				Id:          id,
 				Command:     "docker",
@@ -164,8 +129,8 @@ func TestDeleteTask(t *testing.T) {
 func TestUpdateTask(t *testing.T) {
 	id := uuid.New()
 	now := time.Now()
-	store := mockStore{
-		tasks: map[uuid.UUID]task.Task{
+	store := memory.Repository{
+		Tasks: map[uuid.UUID]task.Task{
 			id: {
 				Id:          id,
 				Command:     "docker",
