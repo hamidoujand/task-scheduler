@@ -71,7 +71,6 @@ func (av *AppValidator) Check(val any) (map[string]string, bool) {
 
 		for _, vErr := range vErrs {
 			fieldName := fmt.Sprintf("%s.%s", vErr.StructField(), vErr.Tag())
-			fmt.Println(fieldName)
 			msg, ok := customValidatorsErrMsg[fieldName]
 			if ok {
 				fields[vErr.Field()] = msg
