@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/go-playground/locales/en"
 	ut "github.com/go-playground/universal-translator"
@@ -42,6 +43,7 @@ func NewAppValidator() (*AppValidator, error) {
 	//register custom validators
 	v.RegisterValidation("commonCommands", commonCommands)
 	v.RegisterValidation("commonArgs", validCommandArgs)
+	v.RegisterValidation("validScheduledAt", validScheduledAt)
 
 	return &AppValidator{
 		validate:   v,
@@ -63,8 +65,9 @@ func (av *AppValidator) Check(val any) (map[string]string, bool) {
 		}
 
 		customValidatorsErrMsg := map[string]string{
-			"Command.commonCommands": "command is not supported in this system",
-			"Args.commonArgs":        "provided args contains invalid chars",
+			"Command.commonCommands":       "command is not supported in this system",
+			"Args.commonArgs":              "provided args contains invalid chars",
+			"ScheduledAt.validScheduledAt": "scheduledAt most be greater or equal to current time",
 		}
 
 		fields := make(map[string]string, len(vErrs))
@@ -99,4 +102,13 @@ func commonCommands(field validator.FieldLevel) bool {
 func validCommandArgs(field validator.FieldLevel) bool {
 	args := field.Field().Interface().([]string)
 	return !slices.Contains(args, ";")
+}
+
+func validScheduledAt(fl validator.FieldLevel) bool {
+	scheduledAt, ok := fl.Field().Interface().(time.Time)
+	if !ok {
+		return false
+	}
+	now := time.Now()
+	return scheduledAt.After(now) || scheduledAt.Equal(now)
 }
