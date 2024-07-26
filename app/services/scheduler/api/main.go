@@ -121,7 +121,7 @@ func run() error {
 
 	signal.Notify(shutdownCh, syscall.SIGTERM, syscall.SIGINT)
 
-	app := handlers.RegisterRoutes(shutdownCh, logger, appValidator)
+	app := handlers.RegisterRoutes(shutdownCh, logger, appValidator, client)
 
 	srv := http.Server{
 		Addr:        configs.API.Host,
