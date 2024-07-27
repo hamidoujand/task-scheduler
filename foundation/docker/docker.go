@@ -65,6 +65,8 @@ func startContainer(image string, name string, port string, dockerArgs []string,
 
 	host, port, err := extractHostPort(id, port)
 	if err != nil {
+		//also stop container
+		stopContainer(id)
 		return Container{}, fmt.Errorf("extract host/port: %w", err)
 	}
 
@@ -78,16 +80,20 @@ func startContainer(image string, name string, port string, dockerArgs []string,
 
 // Stop is going to stop the current container and remove it as well.
 func (c Container) Stop() error {
-	command := exec.Command("docker", "stop", c.Id)
+	return stopContainer(c.Id)
+}
+
+func stopContainer(id string) error {
+	command := exec.Command("docker", "stop", id)
 
 	if err := command.Run(); err != nil {
-		return fmt.Errorf("stopping container %s: %w", c.Id, err)
+		return fmt.Errorf("stopping container %s: %w", id, err)
 	}
 
 	//remove container
-	command = exec.Command("docker", "rm", c.Id)
+	command = exec.Command("docker", "rm", id)
 	if err := command.Run(); err != nil {
-		return fmt.Errorf("removing container %s: %w", c.Id, err)
+		return fmt.Errorf("removing container %s: %w", id, err)
 	}
 
 	return nil
