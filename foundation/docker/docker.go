@@ -90,7 +90,8 @@ func stopContainer(id string) error {
 		return fmt.Errorf("stopping container %s: %w", id, err)
 	}
 
-	//remove container
+	//remove container since you assigned name to it, it will not create a new one
+	//and run cmd will error
 	command = exec.Command("docker", "rm", id)
 	if err := command.Run(); err != nil {
 		return fmt.Errorf("removing container %s: %w", id, err)
