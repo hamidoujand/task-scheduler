@@ -13,9 +13,8 @@ import (
 )
 
 // NewDatabaseClient creates a container off of a postgres image and create a client to be used in testing.
-func NewDatabaseClient(t *testing.T) *postgres.Client {
+func NewDatabaseClient(t *testing.T, name string) *postgres.Client {
 	image := "postgres:latest"
-	name := "tasks"
 	port := "5432"
 	dockerArgs := []string{"-e", "POSTGRES_PASSWORD=password"}
 	appArgs := []string{"-c", "log_statement=all"}
@@ -51,17 +50,17 @@ func NewDatabaseClient(t *testing.T) *postgres.Client {
 		t.Fatalf("status check failed: %s", err)
 	}
 
-	//create a random schema inside of this db
+	//create a random database
 	bs := make([]byte, 8)
 	if _, err := rand.Read(bs); err != nil {
-		t.Fatalf("generating random schema name: %s", err)
+		t.Fatalf("generating random database name: %s", err)
 	}
-	schemaName := "a" + hex.EncodeToString(bs)
-
-	q := "CREATE SCHEMA " + schemaName
+	// dbName := "a" + hex.EncodeToString(bs)
+	dbName := "a" + hex.EncodeToString(bs)
+	q := "CREATE DATABASE " + dbName
 
 	if _, err := masterClient.DB.ExecContext(context.Background(), q); err != nil {
-		t.Fatalf("failed to create schema %q: %s", schemaName, err)
+		t.Fatalf("failed to create database %q: %s", dbName, err)
 	}
 
 	//new client
@@ -69,20 +68,21 @@ func NewDatabaseClient(t *testing.T) *postgres.Client {
 		User:       "postgres",
 		Password:   "password",
 		Host:       c.HostPort,
-		Name:       "postgres",
-		Schema:     schemaName,
+		Name:       dbName,
 		DisableTLS: true,
 	})
 	if err != nil {
 		t.Fatalf("failed to create a client: %s", err)
 	}
 
+	t.Logf("connected to the database %s", dbName)
+
 	if err := masterClient.StatusCheck(ctx); err != nil {
 		t.Fatalf("status check failed against slave client: %s", err)
 	}
 
 	//run migrations
-	t.Logf("running migration against: %q schema", schemaName)
+	t.Logf("running migration against: %q database", dbName)
 
 	if err := client.Migrate(); err != nil {
 		t.Fatalf("failed to run migrations: %s", err)
@@ -90,14 +90,28 @@ func NewDatabaseClient(t *testing.T) *postgres.Client {
 
 	//register cleanup functions to run after each test.
 	t.Cleanup(func() {
-		// close master conn
-		t.Logf("deleting schema %s", schemaName)
-		if _, err := masterClient.DB.ExecContext(context.Background(), "DROP SCHEMA "+schemaName+" CASCADE"); err != nil {
-			t.Fatalf("failed to delete schema %s: %s", schemaName, err)
+		// close client
+		if err := client.DB.Close(); err != nil {
+			t.Fatalf("failed to close client connection: %s", err)
 		}
-		//close both clients
+
+		//terminate all conns to that random database otherwise can not delete it
+		const q = `
+		SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=$1;
+		`
+		if _, err := masterClient.DB.ExecContext(context.Background(), q, dbName); err != nil {
+			t.Fatalf("failed to remove all connections to db %q", dbName)
+		}
+
+		t.Logf("terminated all connection to db %q", dbName)
+
+		t.Logf("deleting database %s", dbName)
+		if _, err := masterClient.DB.ExecContext(context.Background(), "DROP DATABASE "+dbName); err != nil {
+			t.Fatalf("failed to delete database %s: %s", dbName, err)
+		}
+
+		//close master client
 		_ = masterClient.DB.Close()
-		_ = client.DB.Close()
 		//clean up container as well
 		if err := c.Stop(); err != nil {
 			t.Logf("failed to stop container %s: %s", c.Id, err)
