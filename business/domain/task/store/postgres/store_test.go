@@ -12,7 +12,7 @@ import (
 )
 
 func Test_Task(t *testing.T) {
-	client := dbtest.NewDatabaseClient(t)
+	client := dbtest.NewDatabaseClient(t, "tasks")
 	store := postgresRepo.NewRepository(client)
 
 	//insert a new task
