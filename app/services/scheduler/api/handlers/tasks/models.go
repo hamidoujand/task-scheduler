@@ -24,7 +24,7 @@ func fromDomainTask(t task.Task) Task {
 		Id:          t.Id.String(),
 		Command:     t.Command,
 		Args:        t.Args,
-		Status:      t.Status,
+		Status:      t.Status.String(),
 		Result:      t.Result,
 		ErrMessage:  t.ErrMessage,
 		ScheduledAt: t.ScheduledAt,

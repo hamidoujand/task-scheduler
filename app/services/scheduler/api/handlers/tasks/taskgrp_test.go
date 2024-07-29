@@ -88,7 +88,7 @@ func TestGetTaskById200(t *testing.T) {
 		Id:          taskId,
 		Command:     "ls",
 		Args:        []string{"-l", "-a"},
-		Status:      "completed",
+		Status:      task.StatusCompleted,
 		Result:      "data",
 		ErrMessage:  "",
 		ScheduledAt: time.Now().Add(-time.Hour).Truncate(0),
@@ -142,7 +142,7 @@ func TestGetTaskById200(t *testing.T) {
 		t.Errorf("expected the length of args to be %d, but got %d", len(savedTsk.Args), len(task.Args))
 	}
 
-	if task.Status != savedTsk.Status {
+	if task.Status != savedTsk.Status.String() {
 		t.Errorf("expected the status to be %q, but got %q", savedTsk.Status, task.Status)
 	}
 
@@ -193,7 +193,7 @@ func TestDeleteTaskById200(t *testing.T) {
 		Id:          taskId,
 		Command:     "ls",
 		Args:        []string{"-l", "-a"},
-		Status:      "completed",
+		Status:      task.StatusCompleted,
 		Result:      "data",
 		ErrMessage:  "",
 		ScheduledAt: time.Now().Add(-time.Hour).Truncate(0),
