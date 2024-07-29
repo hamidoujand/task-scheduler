@@ -10,7 +10,8 @@ import (
 
 // Task represents a task object inside of database.
 type Task struct {
-	Id           string
+	Id           uuid.UUID
+	UserId       uuid.UUID
 	Command      string
 	Args         []string
 	Status       string
@@ -23,7 +24,8 @@ type Task struct {
 
 func toDBTask(t task.Task) Task {
 	return Task{
-		Id:           t.Id.String(),
+		Id:           t.Id,
+		UserId:       t.UserId,
 		Command:      t.Command,
 		Args:         t.Args,
 		Status:       t.Status.String(),
@@ -50,7 +52,8 @@ func (t Task) toDomainTask() task.Task {
 
 	return task.Task{
 		//must parse since we taking it out of db.
-		Id:          uuid.MustParse(t.Id),
+		Id:          t.Id,
+		UserId:      t.UserId,
 		Command:     t.Command,
 		Args:        t.Args,
 		Status:      status,

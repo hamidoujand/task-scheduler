@@ -9,7 +9,7 @@ import (
 )
 
 type User struct {
-	Id           string
+	Id           uuid.UUID
 	Name         string
 	Email        string
 	Roles        []string
@@ -22,7 +22,7 @@ type User struct {
 // ToPostgresUser creates a User that will be saved inside of postgres.
 func ToPostgresUser(u user.User) User {
 	return User{
-		Id:           u.Id.String(),
+		Id:           u.Id,
 		Name:         u.Name,
 		Email:        u.Email.Address,
 		Roles:        user.EncodeRoles(u.Roles),
@@ -36,10 +36,9 @@ func ToPostgresUser(u user.User) User {
 func (u User) ToServiceUser() user.User {
 	//since we getting them from db which already validated
 	roles, _ := user.ParseRoles(u.Roles)
-	Id, _ := uuid.Parse(u.Id)
 
 	return user.User{
-		Id:   Id,
+		Id:   u.Id,
 		Name: u.Name,
 		Email: mail.Address{
 			Name:    u.Name,

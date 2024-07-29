@@ -9,6 +9,7 @@ import (
 // Task represents a task inside the systems.
 type Task struct {
 	Id          uuid.UUID
+	UserId      uuid.UUID
 	Command     string
 	Args        []string
 	Status      Status
@@ -21,6 +22,7 @@ type Task struct {
 
 // NewTask represents all of the required info for creating a new task.
 type NewTask struct {
+	UserId      uuid.UUID
 	Command     string
 	Args        []string
 	ScheduledAt time.Time
