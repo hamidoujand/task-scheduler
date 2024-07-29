@@ -40,7 +40,7 @@ func (s *Service) CreateTask(ctx context.Context, nt NewTask) (Task, error) {
 		Id:          uuid.New(),
 		Command:     nt.Command,
 		Args:        nt.Args,
-		Status:      "pending",
+		Status:      StatusPending,
 		ScheduledAt: nt.ScheduledAt,
 		CreatedAt:   now,
 		UpdatedAt:   now,

@@ -28,8 +28,8 @@ func TestCreateTask(t *testing.T) {
 		t.Fatalf("expected the task to be saved: %s", err)
 	}
 
-	if tsk.Status != "pending" {
-		t.Errorf("expected status to be %q, but got %q", "pending", tsk.Status)
+	if tsk.Status != task.StatusPending {
+		t.Errorf("expected status to be %q, but got %q", task.StatusPending, tsk.Status)
 	}
 
 	if tsk.CreatedAt.IsZero() || tsk.UpdatedAt.IsZero() {
@@ -40,19 +40,20 @@ func TestCreateTask(t *testing.T) {
 func TestGetTaskById(t *testing.T) {
 	id := uuid.New()
 	now := time.Now()
+	dt := task.Task{
+		Id:          id,
+		Command:     "docker",
+		Args:        []string{"ps"},
+		Status:      task.StatusCompleted,
+		Result:      "data",
+		ErrMessage:  "",
+		ScheduledAt: now.Add(time.Hour * 2),
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
 	store := memory.Repository{
 		Tasks: map[uuid.UUID]task.Task{
-			id: {
-				Id:          id,
-				Command:     "docker",
-				Args:        []string{"ps"},
-				Status:      "success",
-				Result:      "data",
-				ErrMessage:  "",
-				ScheduledAt: now.Add(time.Hour * 2),
-				CreatedAt:   now,
-				UpdatedAt:   now,
-			},
+			id: dt,
 		},
 	}
 
@@ -63,15 +64,15 @@ func TestGetTaskById(t *testing.T) {
 		t.Fatalf("should be able to find the task by id: %s", err)
 	}
 
-	if tsk.Command != "docker" {
-		t.Errorf("expected the command to be %s but got %s", "docker", tsk.Command)
+	if tsk.Command != dt.Command {
+		t.Errorf("expected the command to be %s but got %s", dt.Command, tsk.Command)
 	}
 
 	if len(tsk.Args) == 0 {
 		t.Errorf("expected task to have args")
 	}
 
-	if tsk.Args[0] != "ps" {
+	if tsk.Args[0] != dt.Args[0] {
 		t.Errorf("expected the first arg to be %q, but got %q", "ps", tsk.Args[0])
 	}
 
@@ -95,7 +96,7 @@ func TestDeleteTask(t *testing.T) {
 				Id:          id,
 				Command:     "docker",
 				Args:        []string{"ps"},
-				Status:      "success",
+				Status:      task.StatusCompleted,
 				Result:      "data",
 				ErrMessage:  "",
 				ScheduledAt: now.Add(time.Hour * 2),
@@ -135,7 +136,7 @@ func TestUpdateTask(t *testing.T) {
 				Id:          id,
 				Command:     "docker",
 				Args:        []string{"ps"},
-				Status:      "pending",
+				Status:      task.StatusPending,
 				ScheduledAt: now.Add(time.Hour * 2),
 				CreatedAt:   now,
 				UpdatedAt:   now,
@@ -149,7 +150,7 @@ func TestUpdateTask(t *testing.T) {
 		t.Fatalf("should be able to find the task by id: %s", err)
 	}
 
-	status := "completed"
+	status := task.StatusCompleted
 	result := "data"
 
 	ut := task.UpdateTask{

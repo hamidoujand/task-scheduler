@@ -26,7 +26,7 @@ func toDBTask(t task.Task) Task {
 		Id:           t.Id.String(),
 		Command:      t.Command,
 		Args:         t.Args,
-		Status:       t.Status,
+		Status:       t.Status.String(),
 		Result:       sql.Null[string]{V: t.Result, Valid: t.Result != ""},
 		ErrorMessage: sql.Null[string]{V: t.ErrMessage, Valid: t.ErrMessage != ""},
 		ScheduledAt:  t.ScheduledAt.UTC(),
@@ -46,12 +46,14 @@ func (t Task) toDomainTask() task.Task {
 		errMsgs = t.ErrorMessage.V
 	}
 
+	status, _ := task.ParseStatus(t.Status)
+
 	return task.Task{
 		//must parse since we taking it out of db.
 		Id:          uuid.MustParse(t.Id),
 		Command:     t.Command,
 		Args:        t.Args,
-		Status:      t.Status,
+		Status:      status,
 		Result:      result,
 		ErrMessage:  errMsgs,
 		ScheduledAt: t.ScheduledAt.In(time.Local),

@@ -11,7 +11,7 @@ type Task struct {
 	Id          uuid.UUID
 	Command     string
 	Args        []string
-	Status      string
+	Status      Status
 	Result      string
 	ErrMessage  string
 	ScheduledAt time.Time
@@ -28,7 +28,7 @@ type NewTask struct {
 
 // UpdateTask represents all of the data that can be update about a task.
 type UpdateTask struct {
-	Status     *string
+	Status     *Status
 	Result     *string
 	ErrMessage *string
 }
