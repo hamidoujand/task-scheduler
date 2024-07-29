@@ -123,3 +123,39 @@ func (r *Repository) Delete(ctx context.Context, usr user.User) error {
 	}
 	return nil
 }
+
+func (r *Repository) GetByEmail(ctx context.Context, email string) (user.User, error) {
+	const q = `
+	SELECT 
+		id,name,email,array_to_json(roles),password_hash,enabled,created_at,updated_at
+	FROM users
+	WHERE email = $1	
+	`
+	row := r.client.DB.QueryRowContext(ctx, q, email)
+	var roles any
+	var usr User
+
+	err := row.Scan(
+		&usr.Id,
+		&usr.Name,
+		&usr.Email,
+		&roles,
+		&usr.PasswordHash,
+		&usr.Enabled,
+		&usr.CreatedAt,
+		&usr.UpdatedAt,
+	)
+	if err != nil {
+		return user.User{}, fmt.Errorf("scanning row: %w", err)
+	}
+
+	switch t := roles.(type) {
+	case []byte:
+		if err := json.Unmarshal(t, &usr.Roles); err != nil {
+			return user.User{}, fmt.Errorf("unmarshalling roles: %w", err)
+		}
+	default:
+		return user.User{}, fmt.Errorf("roles scanning: %T", roles)
+	}
+	return usr.ToServiceUser(), nil
+}

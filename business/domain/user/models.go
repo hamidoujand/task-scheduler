@@ -22,7 +22,7 @@ type User struct {
 // NewUser represents all required data to create a new user in system.
 type NewUser struct {
 	Name     string
-	Email    string
+	Email    mail.Address
 	Roles    []Role
 	Password string
 }

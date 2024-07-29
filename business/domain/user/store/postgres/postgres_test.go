@@ -238,3 +238,61 @@ func TestDelete(t *testing.T) {
 		t.Fatalf("expected error to be %v but got %v", sql.ErrNoRows, err)
 	}
 }
+
+func TestGetByEmail(t *testing.T) {
+	t.Parallel()
+
+	pgClient := dbtest.NewDatabaseClient(t, "test_getByEmail_user")
+	repo := postgres.NewRepository(pgClient)
+
+	//insert one
+	now := time.Now()
+	id := uuid.New()
+	pass, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("should be able to generate hash: %s", err)
+	}
+	email := mail.Address{
+		Name:    "john",
+		Address: "john@gmail.com",
+	}
+	usr := user.User{
+		Id:           id,
+		Name:         "john",
+		Email:        email,
+		Roles:        []user.Role{user.RoleUser},
+		PasswordHash: pass,
+		Enabled:      true,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	err = repo.Create(context.Background(), usr)
+	if err != nil {
+		t.Fatalf("should be able to create a user in db with valid data: %s", err)
+	}
+
+	//fetch it
+	got, err := repo.GetByEmail(context.Background(), email.Address)
+
+	if err != nil {
+		t.Fatalf("should be able to fetch user by email: %s", err)
+	}
+
+	if got.Name != usr.Name {
+		t.Errorf("expected name to be %s, got %s", usr.Name, got.Name)
+	}
+
+	if got.Email.Address != usr.Email.Address {
+		t.Errorf("expected email to be %s, got %s", usr.Email, got.Email.Address)
+	}
+
+	if !bytes.Equal(got.PasswordHash, usr.PasswordHash) {
+		t.Errorf("expected passwords to be %q, got %q", usr.PasswordHash, got.PasswordHash)
+	}
+
+	if got.Roles[0] != user.RoleUser {
+		t.Errorf("expected role to be %s, but got %s", user.RoleUser, got.Roles[0])
+	}
+
+}
