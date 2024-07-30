@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   -- table to be in the same database.
     user_id UUID NOT NULL,
     command TEXT NOT NULL,
-    args TEXT[] NOT NULL,
+    args TEXT[],
     status TEXT NOT NULL,
     result TEXT,
     error_msg TEXT,
