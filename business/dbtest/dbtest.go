@@ -43,7 +43,7 @@ func NewDatabaseClient(t *testing.T, name string) *postgres.Client {
 	}
 
 	//status check
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	if err := masterClient.StatusCheck(ctx); err != nil {
@@ -77,7 +77,11 @@ func NewDatabaseClient(t *testing.T, name string) *postgres.Client {
 
 	t.Logf("connected to the database %s", dbName)
 
-	if err := masterClient.StatusCheck(ctx); err != nil {
+	// status check
+	ctx, cancel = context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
+
+	if err := client.StatusCheck(ctx); err != nil {
 		t.Fatalf("status check failed against slave client: %s", err)
 	}
 
