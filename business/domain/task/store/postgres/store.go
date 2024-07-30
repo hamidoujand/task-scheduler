@@ -25,14 +25,15 @@ func NewRepository(clint *postgres.Client) *Repository {
 func (s *Repository) Create(ctx context.Context, task task.Task) error {
 	const q = `
 	INSERT INTO tasks
-		(id,command,args,status,result,error_msg,scheduled_at,created_at,updated_at)
+		(id,user_id,command,args,status,result,error_msg,scheduled_at,created_at,updated_at)
 	VALUES
-		($1,$2,$3,$4,$5,$6,$7,$8,$9);
+		($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);
 	`
 
 	dbTask := toDBTask(task)
 	_, err := s.client.DB.ExecContext(ctx, q,
 		dbTask.Id,
+		dbTask.UserId,
 		dbTask.Command,
 		dbTask.Args,
 		dbTask.Status,
@@ -91,7 +92,7 @@ func (s *Repository) GetById(ctx context.Context, taskId uuid.UUID) (task.Task, 
 	var dbTask Task
 	const q = `
 	SELECT 
-		id, command,array_to_json(args) as args,status,result,error_msg,scheduled_at,created_at,updated_at
+		id,user_id,command,array_to_json(args) as args,status,result,error_msg,scheduled_at,created_at,updated_at
 	FROM 
 		tasks
 	WHERE 
@@ -104,6 +105,7 @@ func (s *Repository) GetById(ctx context.Context, taskId uuid.UUID) (task.Task, 
 
 	if err := row.Scan(
 		&dbTask.Id,
+		&dbTask.UserId,
 		&dbTask.Command,
 		&commandArgs,
 		&dbTask.Status,

@@ -22,9 +22,11 @@ func TestCreate(t *testing.T) {
 
 	//insert a new task
 	id := uuid.New()
+	userId := uuid.New()
 	now := time.Now()
 	tt := task.Task{
 		Id:          id,
+		UserId:      userId,
 		Command:     "ls",
 		Args:        []string{"-1", "-a"},
 		Status:      task.StatusPending,
@@ -46,9 +48,11 @@ func TestGetById(t *testing.T) {
 
 	//insert a new task
 	id := uuid.New()
+	userId := uuid.New()
 	now := time.Now()
 	tt := task.Task{
 		Id:          id,
+		UserId:      userId,
 		Command:     "ls",
 		Args:        []string{"-l", "-a"},
 		Status:      task.StatusPending,
@@ -66,7 +70,6 @@ func TestGetById(t *testing.T) {
 	if err != nil {
 		t.Fatalf("should return task by id %s", id)
 	}
-
 	if tsk.Command != tt.Command {
 		t.Errorf("expected command to be %q, got %q", tt.Command, tsk.Command)
 	}
@@ -86,6 +89,10 @@ func TestGetById(t *testing.T) {
 	if diffTime >= time.Hour*10 {
 		t.Errorf("expected diff between scheduledAt and now to be less or equal to 10 but got %s", diffTime)
 	}
+
+	if tsk.UserId != userId {
+		t.Errorf("expected userId to be %s, got %s", userId, tsk.UserId)
+	}
 }
 
 func TestUpdate(t *testing.T) {
@@ -96,9 +103,12 @@ func TestUpdate(t *testing.T) {
 
 	//insert a new task
 	id := uuid.New()
+	userId := uuid.New()
+
 	now := time.Now()
 	tt := task.Task{
 		Id:          id,
+		UserId:      userId,
 		Command:     "ls",
 		Args:        []string{"-l", "-a"},
 		Status:      task.StatusPending,
@@ -113,6 +123,7 @@ func TestUpdate(t *testing.T) {
 
 	tu := task.Task{
 		Id:          id,
+		UserId:      userId,
 		Command:     "ls",
 		Args:        []string{"-l", "-a"},
 		Status:      task.StatusCompleted,
@@ -153,9 +164,11 @@ func TestDelete(t *testing.T) {
 
 	//insert a new task
 	id := uuid.New()
+	userId := uuid.New()
 	now := time.Now()
 	tt := task.Task{
 		Id:          id,
+		UserId:      userId,
 		Command:     "ls",
 		Args:        []string{"-l", "-a"},
 		Status:      task.StatusPending,
