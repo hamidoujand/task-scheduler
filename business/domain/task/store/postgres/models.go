@@ -13,7 +13,7 @@ type Task struct {
 	Id           uuid.UUID
 	UserId       uuid.UUID
 	Command      string
-	Args         []string
+	Args         sql.Null[[]string]
 	Status       string
 	Result       sql.Null[string]
 	ErrorMessage sql.Null[string]
@@ -24,10 +24,13 @@ type Task struct {
 
 func toDBTask(t task.Task) Task {
 	return Task{
-		Id:           t.Id,
-		UserId:       t.UserId,
-		Command:      t.Command,
-		Args:         t.Args,
+		Id:      t.Id,
+		UserId:  t.UserId,
+		Command: t.Command,
+		Args: sql.Null[[]string]{
+			V:     t.Args,
+			Valid: t.Args != nil,
+		},
 		Status:       t.Status.String(),
 		Result:       sql.Null[string]{V: t.Result, Valid: t.Result != ""},
 		ErrorMessage: sql.Null[string]{V: t.ErrMessage, Valid: t.ErrMessage != ""},
@@ -48,6 +51,11 @@ func (t Task) toDomainTask() task.Task {
 		errMsgs = t.ErrorMessage.V
 	}
 
+	var args []string
+	if t.Args.Valid {
+		args = t.Args.V
+	}
+
 	status, _ := task.ParseStatus(t.Status)
 
 	return task.Task{
@@ -55,7 +63,7 @@ func (t Task) toDomainTask() task.Task {
 		Id:          t.Id,
 		UserId:      t.UserId,
 		Command:     t.Command,
-		Args:        t.Args,
+		Args:        args,
 		Status:      status,
 		Result:      result,
 		ErrMessage:  errMsgs,

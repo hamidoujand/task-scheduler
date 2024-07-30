@@ -29,11 +29,10 @@ type Service struct {
 
 // NewService creates *Service and returns it.
 func NewService(store store) *Service {
-	return &Service{store: store}
+	return &Service{store}
 }
 
 func (s *Service) CreateTask(ctx context.Context, nt NewTask) (Task, error) {
-
 	now := time.Now()
 
 	task := Task{

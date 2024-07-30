@@ -53,8 +53,8 @@ func TestGetById(t *testing.T) {
 	tt := task.Task{
 		Id:          id,
 		UserId:      userId,
-		Command:     "ls",
-		Args:        []string{"-l", "-a"},
+		Command:     "date",
+		Args:        nil,
 		Status:      task.StatusPending,
 		ScheduledAt: now.Add(time.Hour * 10),
 		CreatedAt:   now,
@@ -77,11 +77,8 @@ func TestGetById(t *testing.T) {
 		t.Errorf("expected args length to b %d but got %d", len(tt.Args), len(tsk.Args))
 	}
 
-	expectedArgs := []string{"-a", "-l"}
-	for _, arg := range expectedArgs {
-		if !slices.Contains(tsk.Args, arg) {
-			t.Errorf("expected arg %q to be in args slice", arg)
-		}
+	if tsk.Args != nil {
+		t.Errorf("expected the args to be nil, got %v", tsk.Args)
 	}
 
 	diffTime := tsk.ScheduledAt.Sub(now)
@@ -109,8 +106,7 @@ func TestUpdate(t *testing.T) {
 	tt := task.Task{
 		Id:          id,
 		UserId:      userId,
-		Command:     "ls",
-		Args:        []string{"-l", "-a"},
+		Command:     "ps",
 		Status:      task.StatusPending,
 		ScheduledAt: now.Add(time.Hour * 10),
 		CreatedAt:   now,
@@ -125,7 +121,6 @@ func TestUpdate(t *testing.T) {
 		Id:          id,
 		UserId:      userId,
 		Command:     "ls",
-		Args:        []string{"-l", "-a"},
 		Status:      task.StatusCompleted,
 		Result:      "data",
 		ScheduledAt: now.Add(time.Hour * 10),
@@ -140,7 +135,7 @@ func TestUpdate(t *testing.T) {
 	// get the task by id
 	updated, err := store.GetById(context.Background(), id)
 	if err != nil {
-		t.Fatalf("should return task by id after update %s", id)
+		t.Fatalf("should return task by id after update %s", err)
 	}
 
 	if updated.Status != tu.Status {
@@ -195,4 +190,79 @@ func TestDelete(t *testing.T) {
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("expected error to be %v but got %v", sql.ErrNoRows, err)
 	}
+}
+
+func TestGetByUserId(t *testing.T) {
+	t.Parallel()
+
+	client := dbtest.NewDatabaseClient(t, "test_task_getByUserId")
+	store := postgresRepo.NewRepository(client)
+
+	//seed
+	userId, commands := seedRandomTasks(t, store)
+
+	usersTasks, err := store.GetByUserId(context.Background(), userId)
+	if err != nil {
+		t.Fatalf("expected to get all tasks created by user %q: %s", userId, err)
+	}
+
+	if len(usersTasks) != 4 {
+		t.Errorf("expected the length of usersTasks to be %d, got %d", len(commands), len(usersTasks))
+	}
+
+	for _, task := range usersTasks {
+		if !slices.Contains(commands, task.Command) {
+			t.Errorf("%s, not exists inside of commands slice", task.Command)
+		}
+
+		if task.UserId != userId {
+			t.Errorf("expected the user id for all tasks to be %s, got %s", userId, task.UserId)
+		}
+
+		if task.Command == "ls" {
+			//check for parsed args
+			args := []string{"-l", "-a"}
+			for _, arg := range task.Args {
+				if !slices.Contains(args, arg) {
+					t.Errorf("expected %s arg to be in args slice", arg)
+				}
+			}
+		} else {
+			//no args should be parsed to nil
+			if task.Args != nil {
+				t.Errorf("args should be nil for command %s, got %v", task.Command, task.Args)
+			}
+		}
+	}
+
+}
+
+func seedRandomTasks(t *testing.T, s *postgresRepo.Repository) (uuid.UUID, []string) {
+	userId := uuid.New()
+	commands := []string{"ls", "date", "ps", "top"}
+	now := time.Now()
+
+	for _, c := range commands {
+		task := task.Task{
+			Id:          uuid.New(),
+			UserId:      userId,
+			Command:     c,
+			Status:      task.StatusCompleted,
+			Result:      "data",
+			CreatedAt:   now,
+			ScheduledAt: now,
+			UpdatedAt:   now,
+			ErrMessage:  "",
+		}
+
+		if c == "ls" {
+			task.Args = []string{"-l", "-a"}
+		}
+
+		err := s.Create(context.Background(), task)
+		if err != nil {
+			t.Fatalf("expected to seed database for getByUserId: %s", err)
+		}
+	}
+	return userId, commands
 }

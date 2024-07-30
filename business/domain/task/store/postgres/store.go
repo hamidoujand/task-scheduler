@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 
@@ -118,14 +119,88 @@ func (s *Repository) GetById(ctx context.Context, taskId uuid.UUID) (task.Task, 
 		return task.Task{}, fmt.Errorf("row scan: %w", err)
 	}
 
-	switch val := commandArgs.(type) {
-	case []byte:
-		if err := json.Unmarshal(val, &dbTask.Args); err != nil {
-			return task.Task{}, fmt.Errorf("unmarshalling args: %w", err)
-		}
-	default:
-		return task.Task{}, fmt.Errorf("args scan: %T", commandArgs)
+	args, err := parseArgs(commandArgs)
+
+	if err != nil {
+		return task.Task{}, fmt.Errorf("parseArgs: %w", err)
 	}
 
+	dbTask.Args = args
+
 	return dbTask.toDomainTask(), nil
+}
+
+func (r *Repository) GetByUserId(ctx context.Context, userId uuid.UUID) ([]task.Task, error) {
+	const q = `
+	SELECT 
+		id,user_id,command,array_to_json(args) as args,status,result,error_msg,scheduled_at,created_at,updated_at
+	FROM 
+		tasks
+	WHERE 
+		user_id = $1		
+	`
+	var results []task.Task
+	rows, err := r.client.DB.QueryContext(ctx, q, userId)
+
+	if err != nil {
+		return nil, fmt.Errorf("queryContext: %w", err)
+	}
+
+	for rows.Next() {
+		var dbTask Task
+		var commandArgs any
+		err := rows.Scan(
+			&dbTask.Id,
+			&dbTask.UserId,
+			&dbTask.Command,
+			&commandArgs,
+			&dbTask.Status,
+			&dbTask.Result,
+			&dbTask.ErrorMessage,
+			&dbTask.ScheduledAt,
+			&dbTask.CreatedAt,
+			&dbTask.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+
+		args, err := parseArgs(commandArgs)
+
+		if err != nil {
+			return nil, fmt.Errorf("parseArgs: %w", err)
+		}
+
+		dbTask.Args = args
+
+		results = append(results, dbTask.toDomainTask())
+	}
+
+	return results, nil
+}
+
+func parseArgs(raw any) (sql.Null[[]string], error) {
+	var args sql.Null[[]string]
+
+	switch val := raw.(type) {
+	case []byte:
+		// var args []string
+		if err := json.Unmarshal(val, &args.V); err != nil {
+			return sql.Null[[]string]{}, fmt.Errorf("unmarshalling args: %w", err)
+		}
+
+	case nil:
+		return sql.Null[[]string]{
+			V:     nil,
+			Valid: true,
+		}, nil
+
+	default:
+		return sql.Null[[]string]{}, fmt.Errorf("args scan: %T", args)
+	}
+
+	//valid
+	args.Valid = args.V != nil
+
+	return args, nil
 }
