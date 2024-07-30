@@ -170,3 +170,50 @@ func TestUpdateTask(t *testing.T) {
 		t.Errorf("expected status to be %q but got %q", status, tsk.Status)
 	}
 }
+
+func TestGetTasksByUserId(t *testing.T) {
+	userId := uuid.New()
+
+	id1 := uuid.New()
+	id2 := uuid.New()
+	id3 := uuid.New()
+
+	store := memory.Repository{
+		Tasks: map[uuid.UUID]task.Task{
+			id1: {
+				Id:      id1,
+				UserId:  userId,
+				Command: "ls",
+				Status:  task.StatusCompleted,
+			},
+			id2: {
+				Id:      id2,
+				UserId:  userId,
+				Command: "date",
+				Status:  task.StatusPending,
+			},
+			id3: {
+				Id:      id3,
+				UserId:  userId,
+				Command: "ps",
+				Status:  task.StatusFailed,
+			},
+		},
+	}
+	service := task.NewService(&store)
+
+	tasks, err := service.GetTasksByUserId(context.Background(), userId)
+	if err != nil {
+		t.Fatalf("expected to get tasks related to user %s: %s", userId, err)
+	}
+
+	if len(tasks) != 3 {
+		t.Errorf("len(tasks)=%d, got %d", 3, len(tasks))
+	}
+
+	for _, tsk := range tasks {
+		if tsk.UserId != userId {
+			t.Errorf("task.UserId= %s, got %s", userId, tsk.UserId)
+		}
+	}
+}

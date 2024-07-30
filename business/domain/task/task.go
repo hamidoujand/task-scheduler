@@ -20,6 +20,7 @@ type store interface {
 	Update(ctx context.Context, task Task) error
 	Delete(ctx context.Context, task Task) error
 	GetById(ctx context.Context, taskId uuid.UUID) (Task, error)
+	GetByUserId(ctx context.Context, userId uuid.UUID) ([]Task, error)
 }
 
 // Service represents set of APIs for accessing tasks.
@@ -93,4 +94,13 @@ func (s *Service) UpdateTask(ctx context.Context, task Task, ut UpdateTask) (Tas
 	}
 
 	return task, nil
+}
+
+// GetTaskByUserId queries all of the taks belong to a user and retunrs them or possible error.
+func (s *Service) GetTasksByUserId(ctx context.Context, userId uuid.UUID) ([]Task, error) {
+	tasks, err := s.store.GetByUserId(ctx, userId)
+	if err != nil {
+		return nil, fmt.Errorf("getByUserId: %w", err)
+	}
+	return tasks, nil
 }
