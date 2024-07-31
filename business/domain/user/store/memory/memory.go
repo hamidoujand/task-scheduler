@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hamidoujand/task-scheduler/business/domain/user"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type Repository struct {
@@ -19,6 +20,16 @@ type Repository struct {
 func (r *Repository) Create(ctx context.Context, usr user.User) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	for _, user := range r.Users {
+		if user.Email.Address == usr.Email.Address {
+			pgErr := pgconn.PgError{
+				Code: "23505",
+			}
+			return &pgErr
+		}
+	}
+
 	r.Users[usr.Id] = usr
 	return nil
 }
