@@ -20,6 +20,7 @@ const (
 var (
 	ErrUniqueEmail  = errors.New("email is already in use")
 	ErrUserNotFound = errors.New("user not found")
+	ErrLoginFailed  = errors.New("login failed")
 )
 
 type repository interface {
@@ -145,6 +146,22 @@ func (s *Service) GetByEmail(ctx context.Context, email mail.Address) (User, err
 			return User{}, ErrUserNotFound
 		}
 		return User{}, fmt.Errorf("get by email: %w", err)
+	}
+
+	return usr, nil
+}
+
+// Login gets the user by email and checks the password
+func (s *Service) Login(ctx context.Context, email mail.Address, password string) (User, error) {
+	usr, err := s.GetByEmail(ctx, email)
+	if err != nil {
+		return User{}, fmt.Errorf("getByEmail[%s]: %w", email.Address, err)
+	}
+
+	//compare passwords
+	err = bcrypt.CompareHashAndPassword(usr.PasswordHash, []byte(password))
+	if err != nil {
+		return User{}, ErrLoginFailed
 	}
 
 	return usr, nil

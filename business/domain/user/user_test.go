@@ -45,12 +45,13 @@ func TestParseRoles(t *testing.T) {
 func TestCreateUser(t *testing.T) {
 	t.Parallel()
 	pass := "test1234"
+	email := mail.Address{
+		Name:    "john",
+		Address: "john@gmail.com",
+	}
 	nu := user.NewUser{
-		Name: "john",
-		Email: mail.Address{
-			Name:    "john",
-			Address: "john@gmail.com",
-		},
+		Name:     "john",
+		Email:    email,
 		Roles:    []user.Role{user.RoleUser},
 		Password: pass,
 	}
@@ -84,6 +85,15 @@ func TestCreateUser(t *testing.T) {
 	err = bcrypt.CompareHashAndPassword(got.PasswordHash, []byte(pass))
 	if err != nil {
 		t.Errorf("expected the password to be correctly hashes: %s", err)
+	}
+
+	//dplicated email
+	_, err = service.CreateUser(context.Background(), nu)
+	if err == nil {
+		t.Fatalf("should not be able to create a user with duplicated email")
+	}
+	if !errors.Is(err, user.ErrUniqueEmail) {
+		t.Errorf("error= %v, want %v", err, user.ErrUniqueEmail)
 	}
 }
 
@@ -318,5 +328,63 @@ func TestGetByEmail(t *testing.T) {
 
 	if !errors.Is(err, user.ErrUserNotFound) {
 		t.Fatalf("expected error to be %v, got %v", user.ErrUserNotFound, err)
+	}
+}
+
+func TestLogin(t *testing.T) {
+	t.Parallel()
+	pass := "test1234"
+	email := mail.Address{
+		Name:    "john",
+		Address: "john@gmail.com",
+	}
+
+	nu := user.NewUser{
+		Name:     "john",
+		Email:    email,
+		Roles:    []user.Role{user.RoleUser},
+		Password: pass,
+	}
+
+	repo := memory.Repository{
+		Users: make(map[uuid.UUID]user.User),
+	}
+
+	service := user.NewService(&repo)
+
+	usr, err := service.CreateUser(context.Background(), nu)
+	if err != nil {
+		t.Fatalf("expected the user to be saved with valid data: %s", err)
+	}
+
+	got, err := service.Login(context.Background(), email, pass)
+	if err != nil {
+		t.Fatalf("expected to login with the valid credentials: %s", err)
+	}
+
+	if !reflect.DeepEqual(usr, got) {
+		t.Fatal("expected the user from login to be the same we got from create")
+	}
+
+	_, err = service.Login(context.Background(), email, "pass")
+	if err == nil {
+		t.Fatal("expected to get an error while using invalid credentials")
+	}
+
+	if !errors.Is(err, user.ErrLoginFailed) {
+		t.Errorf("error = %v, want %v", err, user.ErrLoginFailed)
+	}
+
+	email = mail.Address{
+		Name:    "jane",
+		Address: "jane@hotmail.com",
+	}
+	_, err = service.Login(context.Background(), email, pass)
+	if err == nil {
+		t.Fatalf("expected the login to fail when using random email")
+	}
+
+	if !errors.Is(err, user.ErrUserNotFound) {
+		t.Errorf("error= %v, want %v", err, user.ErrUserNotFound)
 	}
 }
