@@ -3,6 +3,7 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"testing"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
@@ -80,12 +82,12 @@ func (a *Auth) GenerateToken(kid string, claims Claims) (string, error) {
 	return tokenString, nil
 }
 
-// ValidateToken is going to validate a jwt bearer token and return the claims on success and possible errors.
-func (a *Auth) ValidateToken(ctx context.Context, bearerToken string) (Claims, error) {
+// ValidateToken is going to validate a jwt bearer token and return the corresponding user on success and possible errors.
+func (a *Auth) ValidateToken(ctx context.Context, bearerToken string) (user.User, error) {
 	prefix := "Bearer "
 
 	if !strings.HasPrefix(bearerToken, prefix) {
-		return Claims{}, errors.New("invalid authorization header format: Bearer <token>")
+		return user.User{}, errors.New("invalid authorization header format: Bearer <token>")
 	}
 
 	tknString := bearerToken[len(prefix):]
@@ -109,7 +111,7 @@ func (a *Auth) ValidateToken(ctx context.Context, bearerToken string) (Claims, e
 
 		pemBlock, _ := pem.Decode([]byte(publicPEM))
 		if pemBlock == nil || pemBlock.Type != "PUBLIC KEY" {
-			return Claims{}, errors.New("failed to decode public key into pem block")
+			return nil, errors.New("failed to decode public key into pem block")
 		}
 
 		publicKey, err := x509.ParsePKIXPublicKey(pemBlock.Bytes)
@@ -124,42 +126,104 @@ func (a *Auth) ValidateToken(ctx context.Context, bearerToken string) (Claims, e
 	tkn, err := jwt.ParseWithClaims(tknString, &claims, keyFn)
 
 	if err != nil {
-		return Claims{}, fmt.Errorf("parse with claims: %w", err)
+		return user.User{}, fmt.Errorf("parse with claims: %w", err)
 	}
 
 	if !tkn.Valid {
-		return Claims{}, errors.New("invalid token")
+		return user.User{}, errors.New("invalid token")
 	}
 
 	//check the user in db
 	id, err := uuid.Parse(claims.Subject)
 	if err != nil {
-		return Claims{}, fmt.Errorf("parse user id: %w", err)
+		return user.User{}, fmt.Errorf("parse user id: %w", err)
 	}
 
 	usr, err := a.userService.GetUserById(ctx, id)
 	if err != nil {
-		return Claims{}, fmt.Errorf("getUserById: %w", err)
+		return user.User{}, fmt.Errorf("getUserById: %w", err)
 	}
 
 	if !usr.Enabled {
-		return Claims{}, errors.New("user is disabled")
+		return user.User{}, errors.New("user is disabled")
 	}
 
-	return claims, nil
+	return usr, nil
 }
 
 // Authorized checks the claims and allowed roles and returns nil if claims have the role otherwise returns an error.
-func (a *Auth) Authorized(claims Claims, roles []user.Role) error {
-	parsedRoles, err := user.ParseRoles(claims.Roles)
-	if err != nil {
-		return fmt.Errorf("parseRoles: %w", err)
-	}
+func (a *Auth) Authorized(usr user.User, roles []user.Role) error {
 
-	for _, have := range parsedRoles {
+	for _, have := range usr.Roles {
 		if slices.Contains(roles, have) {
 			return nil
 		}
 	}
 	return errors.New("not authorized")
+}
+
+type mockKeyStore struct {
+	privateKey string
+	publicKey  string
+}
+
+func NewMockKeyStore(t *testing.T) mockKeyStore {
+	private, public := generateKeys(t)
+	return mockKeyStore{
+		privateKey: private,
+		publicKey:  public,
+	}
+}
+
+func (m mockKeyStore) PrivateKey(kid string) (string, error) {
+	return m.privateKey, nil
+}
+
+func (m mockKeyStore) PublicKey(kid string) (string, error) {
+	return m.publicKey, nil
+}
+
+func generateKeys(t *testing.T) (string, string) {
+	private, err := rsa.GenerateKey(rand.Reader, 2048)
+
+	if err != nil {
+		t.Fatalf("expected to generate random private key: %s", err)
+	}
+
+	//save it in PKCS8 format
+	pkcs8Private, err := x509.MarshalPKCS8PrivateKey(private)
+	if err != nil {
+		t.Fatalf("expected to marshal key into pkcs8 format: %s", err)
+	}
+
+	PrivatePemBlock := pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: pkcs8Private,
+	}
+
+	var privatePEM strings.Builder
+	err = pem.Encode(&privatePEM, &PrivatePemBlock)
+	if err != nil {
+		t.Fatalf("expected to encode into privatePEM: %s", err)
+	}
+
+	// public key
+	var publicPEM strings.Builder
+	publicBytes, err := x509.MarshalPKIXPublicKey(&private.PublicKey)
+
+	if err != nil {
+		t.Fatalf("expected to marshal public key into PKIX format: %s", err)
+	}
+
+	publicPemBlock := pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: publicBytes,
+	}
+
+	err = pem.Encode(&publicPEM, &publicPemBlock)
+	if err != nil {
+		t.Fatalf("expected to encode public key: %s", err)
+	}
+
+	return privatePEM.String(), publicPEM.String()
 }

@@ -2,12 +2,8 @@ package auth_test
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 	"net/mail"
-	"strings"
+	"reflect"
 	"testing"
 	"time"
 
@@ -28,24 +24,8 @@ type mockKeyStore struct {
 	publicKey  string
 }
 
-func newMockKeyStore(t *testing.T) mockKeyStore {
-	private, public := generateKeys(t)
-	return mockKeyStore{
-		privateKey: private,
-		publicKey:  public,
-	}
-}
-
-func (m mockKeyStore) PrivateKey(kid string) (string, error) {
-	return m.privateKey, nil
-}
-
-func (m mockKeyStore) PublicKey(kid string) (string, error) {
-	return m.publicKey, nil
-}
-
 func TestToken(t *testing.T) {
-	ks := newMockKeyStore(t)
+	ks := auth.NewMockKeyStore(t)
 	usrId := uuid.New()
 	now := time.Now()
 
@@ -92,79 +72,28 @@ func TestToken(t *testing.T) {
 
 	bearer := "Bearer " + tkn
 
-	parsedClaims, err := a.ValidateToken(context.Background(), bearer)
+	usr, err := a.ValidateToken(context.Background(), bearer)
 	if err != nil {
-		t.Fatalf("expected the token to valid and get back parsed claims: %s", err)
+		t.Fatalf("expected the token to valid and get back user: %s", err)
 	}
 
-	if parsedClaims.Subject != c.Subject {
-		t.Errorf("claims.Subject=%s , got %s", c.Subject, parsedClaims.Subject)
+	if usr.Id.String() != c.Subject {
+		t.Fatalf("expected the userId to match the claims")
 	}
 
-	if parsedClaims.Issuer != c.Issuer {
-		t.Errorf("claims.Issuer= %s, got %s", c.Issuer, parsedClaims.Issuer)
+	savedUser := userRepo.Users[usrId]
+	if !reflect.DeepEqual(usr, savedUser) {
+		t.Logf("repo:\n\n%v\n\n", savedUser)
+		t.Logf("claim:\n\n%v\n\n", usr)
+		t.Fatal("expected user from validate token to be the same as saved in repo")
 	}
-
-	if parsedClaims.Roles[0] != c.Roles[0] {
-		t.Errorf("claims.Roles[0]=%s , got %s", c.Roles[0], parsedClaims.Roles[0])
-	}
-
-	if !parsedClaims.ExpiresAt.Time.Equal(c.ExpiresAt.Time) {
-		t.Errorf("claims.ExpiresAt= %s, got %s", c.ExpiresAt.Time, parsedClaims.ExpiresAt.Time)
-	}
-
-	if !parsedClaims.IssuedAt.Time.Equal(c.IssuedAt.Time) {
-		t.Errorf("claims.IssuedAt= %s, got %s", c.IssuedAt.Time, parsedClaims.IssuedAt.Time)
-	}
-}
-
-func generateKeys(t *testing.T) (string, string) {
-	private, err := rsa.GenerateKey(rand.Reader, 2048)
-
-	if err != nil {
-		t.Fatalf("expected to generate random private key: %s", err)
-	}
-
-	//save it in PKCS8 format
-	pkcs8Private, err := x509.MarshalPKCS8PrivateKey(private)
-	if err != nil {
-		t.Fatalf("expected to marshal key into pkcs8 format: %s", err)
-	}
-
-	PrivatePemBlock := pem.Block{
-		Type:  "PRIVATE KEY",
-		Bytes: pkcs8Private,
-	}
-
-	var privatePEM strings.Builder
-	err = pem.Encode(&privatePEM, &PrivatePemBlock)
-	if err != nil {
-		t.Fatalf("expected to encode into privatePEM: %s", err)
-	}
-
-	// public key
-	var publicPEM strings.Builder
-	publicBytes, err := x509.MarshalPKIXPublicKey(&private.PublicKey)
-
-	if err != nil {
-		t.Fatalf("expected to marshal public key into PKIX format: %s", err)
-	}
-
-	publicPemBlock := pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: publicBytes,
-	}
-
-	err = pem.Encode(&publicPEM, &publicPemBlock)
-	if err != nil {
-		t.Fatalf("expected to encode public key: %s", err)
-	}
-
-	return privatePEM.String(), publicPEM.String()
 }
 
 func TestAuthorized(t *testing.T) {
-	ks := newMockKeyStore(t)
+	ks := auth.NewMockKeyStore(t)
+	usr := user.User{
+		Roles: []user.Role{user.RoleAdmin},
+	}
 
 	userRepo := memory.Repository{
 		Users: map[uuid.UUID]user.User{},
@@ -173,16 +102,12 @@ func TestAuthorized(t *testing.T) {
 	userService := user.NewService(&userRepo)
 	a := auth.New(ks, userService)
 
-	c := auth.Claims{
-		Roles: []string{user.RoleAdmin.String()},
-	}
-
-	err := a.Authorized(c, []user.Role{user.RoleAdmin})
+	err := a.Authorized(usr, []user.Role{user.RoleAdmin})
 	if err != nil {
 		t.Fatalf("expected the claims to be authorized: %s", err)
 	}
 
-	err = a.Authorized(c, []user.Role{user.RoleUser})
+	err = a.Authorized(usr, []user.Role{user.RoleUser})
 	if err == nil {
 		t.Fatal("expected the claims to not be authorized")
 	}
