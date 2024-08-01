@@ -9,12 +9,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
 	"github.com/hamidoujand/task-scheduler/business/domain/task"
+	"github.com/hamidoujand/task-scheduler/business/domain/user"
 	"github.com/hamidoujand/task-scheduler/foundation/web"
 )
 
 type Handler struct {
 	Validator   *errs.AppValidator
 	TaskService *task.Service
+	UserService *user.Service
 }
 
 func (h *Handler) CreateTask(ctx context.Context, w http.ResponseWriter, r *http.Request) error {

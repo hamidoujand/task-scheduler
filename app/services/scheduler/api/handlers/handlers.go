@@ -10,7 +10,9 @@ import (
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/mid"
 	"github.com/hamidoujand/task-scheduler/business/database/postgres"
 	"github.com/hamidoujand/task-scheduler/business/domain/task"
-	postgresRepo "github.com/hamidoujand/task-scheduler/business/domain/task/store/postgres"
+	taskPostgresRepo "github.com/hamidoujand/task-scheduler/business/domain/task/store/postgres"
+	"github.com/hamidoujand/task-scheduler/business/domain/user"
+	userPostgresRepo "github.com/hamidoujand/task-scheduler/business/domain/user/store/postgres"
 	"github.com/hamidoujand/task-scheduler/foundation/web"
 )
 
@@ -21,12 +23,16 @@ func RegisterRoutes(shutdown chan os.Signal, logger *slog.Logger, validator *err
 		mid.Panics(),
 	)
 
-	taskStore := postgresRepo.NewRepository(dbClient)
-	taskService := task.NewService(taskStore)
+	taskRepo := taskPostgresRepo.NewRepository(dbClient)
+	taskService := task.NewService(taskRepo)
+
+	userRepo := userPostgresRepo.NewRepository(dbClient)
+	userService := user.NewService(userRepo)
 
 	taskHandler := tasks.Handler{
 		Validator:   validator,
 		TaskService: taskService,
+		UserService: userService,
 	}
 	//==============================================================================
 	//tasks
