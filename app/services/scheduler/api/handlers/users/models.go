@@ -58,3 +58,30 @@ func (nu NewUser) toServiceNewUser() (user.NewUser, error) {
 		Password: nu.Password,
 	}, nil
 }
+
+// UpdateUser represents all of the data that a role user can update.
+type UpdateUser struct {
+	Name            *string `json:"name" validate:"omitempty,min=4"`
+	Email           *string `json:"email" validate:"omitempty,email"`
+	Enabled         *bool   `json:"enabled"`
+	Password        *string `json:"password" validate:"omitempty,min=8"`
+	PasswordConfirm *string `json:"passowordConfirm" validate:"omitempty,eqfield=Password"`
+}
+
+func (u UpdateUser) toServiceUpdateUser() (user.UpdateUser, error) {
+	var email *mail.Address
+	if u.Email != nil {
+		var err error
+		email, err = mail.ParseAddress(*u.Email)
+		if err != nil {
+			return user.UpdateUser{}, fmt.Errorf("parsing email: %w", err)
+		}
+	}
+
+	return user.UpdateUser{
+		Name:     u.Name,
+		Email:    email,
+		Password: u.Password,
+		Enabled:  u.Enabled,
+	}, nil
+}

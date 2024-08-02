@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 
 	"github.com/google/uuid"
+	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/auth"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
 	"github.com/hamidoujand/task-scheduler/business/domain/user"
 	"github.com/hamidoujand/task-scheduler/foundation/web"
@@ -67,4 +69,102 @@ func (h *Handler) GetUserById(ctx context.Context, w http.ResponseWriter, r *htt
 	}
 
 	return web.Respond(ctx, w, http.StatusOK, toAppUser(usr))
+}
+
+// DeleteUserById is going to delete user when the the role is admin or user itself and returns possible errors.
+func (h *Handler) DeleteUserById(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	id := r.PathValue("id")
+	userId, err := uuid.Parse(id)
+	if err != nil {
+		return errs.NewAppErrorf(http.StatusBadRequest, "%q not a valid uuid", id)
+	}
+
+	usr, err := auth.GetUser(ctx)
+	if err != nil {
+		return errs.NewAppError(http.StatusUnauthorized, "unauthorized")
+	}
+
+	if userId != usr.Id && !isItAdmin(usr.Roles) {
+		return errs.NewAppError(http.StatusUnauthorized, "unauthorized")
+	}
+
+	fetched, err := h.UsersService.GetUserById(ctx, userId)
+	if err != nil {
+		if errors.Is(err, user.ErrUserNotFound) {
+			return errs.NewAppErrorf(http.StatusNotFound, "user with id %s not found", userId)
+		}
+		return errs.NewAppInternalErr(err)
+	}
+
+	if err := h.UsersService.DeleteUser(ctx, fetched); err != nil {
+		return errs.NewAppInternalErr(err)
+	}
+
+	return web.Respond(ctx, w, http.StatusNoContent, nil)
+}
+
+// UpdateUser updates a user and returns the possible errors.
+func (h *Handler) UpdateUser(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	id := r.PathValue("id")
+
+	userId, err := uuid.Parse(id)
+	if err != nil {
+		return errs.NewAppErrorf(http.StatusBadRequest, "%q is invalid uuid", userId)
+	}
+
+	usr, err := auth.GetUser(ctx)
+	if err != nil {
+		return errs.NewAppError(http.StatusUnauthorized, "unauthorized")
+	}
+
+	if usr.Id != userId && !isItAdmin(usr.Roles) {
+		return errs.NewAppError(http.StatusUnauthorized, "unauthorized")
+	}
+	var uu UpdateUser
+	if err := json.NewDecoder(r.Body).Decode(&uu); err != nil {
+		return errs.NewAppErrorf(http.StatusBadRequest, "invalid json: %s", err.Error())
+	}
+
+	fields, ok := h.Validator.Check(uu)
+	if !ok {
+		return errs.NewAppValidationError(http.StatusBadRequest, "invalid input", fields)
+	}
+
+	//fetch the user to see if exists
+	fetched, err := h.UsersService.GetUserById(ctx, userId)
+	if err != nil {
+		if errors.Is(err, user.ErrUserNotFound) {
+			return errs.NewAppErrorf(http.StatusNotFound, "user with id %q not found", userId)
+		}
+		return errs.NewAppInternalErr(err)
+	}
+
+	uus, err := uu.toServiceUpdateUser()
+	if err != nil {
+		return errs.NewAppError(http.StatusBadRequest, err.Error())
+	}
+
+	//update it
+	updated, err := h.UsersService.UpdateUser(ctx, uus, fetched)
+	if err != nil {
+		errs.NewAppInternalErr(err)
+	}
+
+	return web.Respond(ctx, w, http.StatusOK, toAppUser(updated))
+}
+
+func (h *Handler) UpdateRole(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+func (h *Handler) Signup(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+func (h *Handler) Signin(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+func isItAdmin(roles []user.Role) bool {
+	return slices.Contains(roles, user.RoleAdmin)
 }
