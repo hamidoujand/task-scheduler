@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/mail"
 	"slices"
 	"time"
 
@@ -246,8 +247,51 @@ func (h *Handler) Signup(ctx context.Context, w http.ResponseWriter, r *http.Req
 	return web.Respond(ctx, w, http.StatusCreated, toAppUserWithToken(newUser, tkn))
 }
 
-func (h *Handler) Signin(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	return nil
+func (h *Handler) Login(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	var login Login
+	if err := json.NewDecoder(r.Body).Decode(&login); err != nil {
+		return errs.NewAppErrorf(http.StatusBadRequest, "invalid json data: %s", err)
+	}
+
+	fields, ok := h.Validator.Check(login)
+	if !ok {
+		return errs.NewAppValidationError(http.StatusBadRequest, "invalid input", fields)
+	}
+
+	parsedMail, err := mail.ParseAddress(login.Email)
+	if err != nil {
+		return errs.NewAppErrorf(http.StatusBadRequest, "parsing email %q", login.Email)
+	}
+
+	//authenticate
+	usr, err := h.UsersService.Login(ctx, *parsedMail, login.Password)
+	if err != nil {
+		if errors.Is(err, user.ErrUserNotFound) {
+			return errs.NewAppError(http.StatusBadRequest, "invalid credentials")
+		}
+		if errors.Is(err, user.ErrLoginFailed) {
+			return errs.NewAppError(http.StatusBadRequest, "invalid credentials")
+		}
+
+		return errs.NewAppInternalErr(err)
+	}
+
+	//generate token
+	c := auth.Claims{
+		Roles: user.EncodeRoles(usr.Roles),
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "task-scheduler",
+			Subject:   usr.Id.String(),
+			ExpiresAt: jwt.NewNumericDate(h.TokenExpiresAt),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	tkn, err := h.Auth.GenerateToken(h.ActiveKID, c)
+	if err != nil {
+		return errs.NewAppInternalErr(err)
+	}
+
+	return web.Respond(ctx, w, http.StatusOK, toAppUserWithToken(usr, tkn))
 }
 
 func isItAdmin(roles []user.Role) bool {

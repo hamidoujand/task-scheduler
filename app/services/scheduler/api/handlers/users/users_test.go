@@ -910,7 +910,7 @@ func TestSignup(t *testing.T) {
 				t.Fatalf("expected the input to be encoded to json: %s", err)
 			}
 
-			r := httptest.NewRequest(http.MethodPost, "/v1/api/users", &buff)
+			r := httptest.NewRequest(http.MethodPost, "/v1/api/users/signup", &buff)
 			w := httptest.NewRecorder()
 
 			err = h.Signup(r.Context(), w, r)
@@ -961,6 +961,159 @@ func TestSignup(t *testing.T) {
 			}
 		})
 
+	}
+
+}
+
+func TestLogin(t *testing.T) {
+	//setup
+	rawPass := "test1234"
+	hashed, err := bcrypt.GenerateFromPassword([]byte(rawPass), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("expected to hash the password: %s", err)
+	}
+
+	v, err := errs.NewAppValidator()
+	if err != nil {
+		t.Fatalf("expected to create the app validator: %s", err)
+	}
+
+	userId := uuid.New()
+	created := time.Now().Add(-time.Hour)
+
+	random := user.User{
+		Id: userId,
+		Email: mail.Address{
+			Name:    "jane",
+			Address: "jane@gmail.com",
+		},
+		Name:         "Jane Doe",
+		Roles:        []user.Role{user.RoleUser},
+		PasswordHash: hashed,
+		Enabled:      true,
+		CreatedAt:    created,
+		UpdatedAt:    created,
+	}
+	userRepo := memory.Repository{
+		Users: map[uuid.UUID]user.User{
+			userId: random,
+		},
+	}
+	ks := auth.NewMockKeyStore(t)
+	userService := user.NewService(&userRepo)
+	a := auth.New(ks, userService)
+	tokenExpiresAt := time.Now().Add(time.Hour)
+
+	h := users.Handler{
+		Validator:      v,
+		UsersService:   userService,
+		Auth:           a,
+		ActiveKID:      kid,
+		TokenExpiresAt: tokenExpiresAt,
+	}
+
+	tests := map[string]struct {
+		input       users.Login
+		statusCode  int
+		expectError bool
+		fields      []string
+	}{
+		"success": {
+			input: users.Login{
+				Email:    "jane@gmail.com",
+				Password: rawPass,
+			},
+			statusCode:  http.StatusOK,
+			expectError: false,
+		},
+		"invalid input": {
+			input: users.Login{
+				Email:    "email",
+				Password: "pass",
+			},
+			statusCode:  http.StatusBadRequest,
+			expectError: true,
+			fields:      []string{"email", "password"},
+		},
+
+		"user not found": {
+			input: users.Login{
+				Email:    "john@gmail.com",
+				Password: "test1234",
+			},
+			statusCode:  http.StatusBadRequest,
+			expectError: true,
+		},
+		"wrong password": {
+			input: users.Login{
+				Email:    "jane@gmail.com",
+				Password: "test1234567",
+			},
+			statusCode:  http.StatusBadRequest,
+			expectError: true,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+
+			var buff bytes.Buffer
+			if err := json.NewEncoder(&buff).Encode(test.input); err != nil {
+				t.Fatalf("expected the input to be encoded into json: %s", err)
+			}
+
+			r := httptest.NewRequest(http.MethodPost, "/v1/api/users/login", &buff)
+			w := httptest.NewRecorder()
+
+			err = h.Login(context.Background(), w, r)
+			if !test.expectError {
+
+				if err != nil {
+					t.Fatalf("expected to login, got err: %s", err)
+				}
+
+				statusCode := w.Result().StatusCode
+				if statusCode != test.statusCode {
+					t.Fatalf("status= %d, got %d", test.statusCode, statusCode)
+				}
+
+				var successResp users.User
+				if err := json.NewDecoder(w.Body).Decode(&successResp); err != nil {
+					t.Fatalf("expected to decode the response body: %s", err)
+				}
+				if successResp.Token == "" {
+					t.Errorf("token= %s, got %s", "<jwt>", successResp.Token)
+				}
+
+				bearer := "Bearer " + successResp.Token
+
+				usr, err := h.Auth.ValidateToken(context.Background(), bearer)
+				if err != nil {
+					t.Fatalf("expected the token to be valid: %s", err)
+				}
+
+				if usr.Id.String() != successResp.ID {
+					t.Errorf("user.Id= %s, got %s", successResp.ID, usr.Id.String())
+				}
+			} else {
+				var appErr *errs.AppError
+				if !errors.As(err, &appErr) {
+					t.Fatalf("expected the error type to be *appError, got: %T", err)
+				}
+
+				if appErr.Code != test.statusCode {
+					t.Errorf("status= %d, got %d", test.statusCode, appErr.Code)
+				}
+
+				if appErr.Fields != nil {
+					for name := range appErr.Fields {
+						if !slices.Contains(test.fields, name) {
+							t.Errorf("expected field %s to be invalid", name)
+						}
+					}
+				}
+			}
+		})
 	}
 
 }
