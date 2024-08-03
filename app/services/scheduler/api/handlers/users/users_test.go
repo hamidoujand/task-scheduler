@@ -75,33 +75,34 @@ func TestCreateUser(t *testing.T) {
 		},
 	}
 
+	v, err := errs.NewAppValidator()
+	if err != nil {
+		t.Fatalf("expected to create the app validator: %s", err)
+	}
+
+	userId := uuid.New()
+	userRepo := memory.Repository{
+		Users: map[uuid.UUID]user.User{
+			userId: {
+				//duplciated
+				Id: userId,
+				Email: mail.Address{
+					Name:    "jane",
+					Address: "jane@gmail.com",
+				},
+			},
+		},
+	}
+
+	userService := user.NewService(&userRepo)
+
+	h := users.Handler{
+		Validator:    v,
+		UsersService: userService,
+	}
+
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			v, err := errs.NewAppValidator()
-			if err != nil {
-				t.Fatalf("expected to create the app validator: %s", err)
-			}
-
-			userId := uuid.New()
-			userRepo := memory.Repository{
-				Users: map[uuid.UUID]user.User{
-					userId: {
-						//duplciated
-						Id: userId,
-						Email: mail.Address{
-							Name:    "jane",
-							Address: "jane@gmail.com",
-						},
-					},
-				},
-			}
-
-			userService := user.NewService(&userRepo)
-
-			h := users.Handler{
-				Validator:    v,
-				UsersService: userService,
-			}
 
 			var buff bytes.Buffer
 
@@ -113,7 +114,7 @@ func TestCreateUser(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/v1/api/users", &buff)
 			w := httptest.NewRecorder()
 
-			err = h.CreateUser(context.Background(), w, req)
+			err := h.CreateUser(context.Background(), w, req)
 
 			if !test.expectError {
 				//success
@@ -195,54 +196,54 @@ func TestGetUserById(t *testing.T) {
 		},
 	}
 
+	v, err := errs.NewAppValidator()
+	if err != nil {
+		t.Fatalf("expected to create the app validator: %s", err)
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte("test1234"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("expected to generate a hash: %s", err)
+	}
+
+	now := time.Now()
+	userId := uuid.MustParse("3dc3bbbc-811a-4bb8-a6fc-fccd709e8158")
+	usr := user.User{
+		Id: userId,
+		Email: mail.Address{
+			Name:    "jane",
+			Address: "jane@gmail.com",
+		},
+		Name:         "Jane Doe",
+		Roles:        []user.Role{user.RoleUser},
+		PasswordHash: hashed,
+		Enabled:      true,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	userRepo := memory.Repository{
+		Users: map[uuid.UUID]user.User{
+			userId: usr,
+		},
+	}
+
+	userService := user.NewService(&userRepo)
+
+	h := users.Handler{
+		Validator:    v,
+		UsersService: userService,
+	}
+
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-
-			v, err := errs.NewAppValidator()
-			if err != nil {
-				t.Fatalf("expected to create the app validator: %s", err)
-			}
-
-			hashed, err := bcrypt.GenerateFromPassword([]byte("test1234"), bcrypt.MinCost)
-			if err != nil {
-				t.Fatalf("expected to generate a hash: %s", err)
-			}
-
-			now := time.Now()
-			userId := uuid.MustParse("3dc3bbbc-811a-4bb8-a6fc-fccd709e8158")
-			usr := user.User{
-				Id: userId,
-				Email: mail.Address{
-					Name:    "jane",
-					Address: "jane@gmail.com",
-				},
-				Name:         "Jane Doe",
-				Roles:        []user.Role{user.RoleUser},
-				PasswordHash: hashed,
-				Enabled:      true,
-				CreatedAt:    now,
-				UpdatedAt:    now,
-			}
-
-			userRepo := memory.Repository{
-				Users: map[uuid.UUID]user.User{
-					userId: usr,
-				},
-			}
-
-			userService := user.NewService(&userRepo)
-
-			h := users.Handler{
-				Validator:    v,
-				UsersService: userService,
-			}
 
 			r := httptest.NewRequest(http.MethodGet, "/v1/api/users/"+test.input, nil)
 			r.SetPathValue("id", test.input)
 
 			w := httptest.NewRecorder()
 
-			err = h.GetUserById(context.Background(), w, r)
+			err := h.GetUserById(context.Background(), w, r)
 			if !test.expectError {
 				//success
 				if err != nil {
@@ -287,9 +288,27 @@ func TestDeleteUserById(t *testing.T) {
 		t.Fatalf("expected to generate a hash: %s", err)
 	}
 	now := time.Now()
-	userId := uuid.MustParse("3dc3bbbc-811a-4bb8-a6fc-fccd709e8158")
-	usr := user.User{
-		Id: userId,
+
+	user1Id := uuid.New()
+
+	usr1 := user.User{
+		Id: user1Id,
+		Email: mail.Address{
+			Name:    "jane",
+			Address: "jane@gmail.com",
+		},
+		Name:         "Jane Doe",
+		Roles:        []user.Role{user.RoleUser},
+		PasswordHash: hashed,
+		Enabled:      true,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	user2Id := uuid.New()
+
+	usr2 := user.User{
+		Id: user2Id,
 		Email: mail.Address{
 			Name:    "jane",
 			Address: "jane@gmail.com",
@@ -303,6 +322,55 @@ func TestDeleteUserById(t *testing.T) {
 	}
 
 	adminId := uuid.New()
+	admin := user.User{
+		Id:   adminId,
+		Name: "Admin",
+		Email: mail.Address{
+			Name:    "Admin",
+			Address: "admin@gmail.com",
+		},
+		Roles:        []user.Role{user.RoleAdmin},
+		PasswordHash: hashed,
+		Enabled:      true,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	randomUserId := uuid.New()
+	randomUser := user.User{
+		Id:   randomUserId,
+		Name: "Random",
+		Email: mail.Address{
+			Name:    "Random",
+			Address: "random@gmail.com",
+		},
+		Roles:        []user.Role{user.RoleUser},
+		PasswordHash: hashed,
+		Enabled:      true,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	v, err := errs.NewAppValidator()
+	if err != nil {
+		t.Fatalf("expected to create the app validator: %s", err)
+	}
+
+	userRepo := memory.Repository{
+		Users: map[uuid.UUID]user.User{
+			user1Id:      usr1,
+			user2Id:      usr2,
+			adminId:      admin,
+			randomUserId: randomUser,
+		},
+	}
+
+	userService := user.NewService(&userRepo)
+
+	h := users.Handler{
+		Validator:    v,
+		UsersService: userService,
+	}
 
 	tests := map[string]struct {
 		userId          string
@@ -312,64 +380,33 @@ func TestDeleteUserById(t *testing.T) {
 		unauthenticated bool
 	}{
 		"delete its own account": {
-			userId:      "3dc3bbbc-811a-4bb8-a6fc-fccd709e8158",
-			user:        usr,
+			userId:      user1Id.String(),
+			user:        usr1,
 			statusCode:  http.StatusNoContent,
 			expectError: false,
 		},
 
 		"admin deleting other users": {
-			userId: "3dc3bbbc-811a-4bb8-a6fc-fccd709e8158",
-			user: user.User{
-				Id:   adminId,
-				Name: "Admin",
-				Email: mail.Address{
-					Name:    "Admin",
-					Address: "admin@gmail.com",
-				},
-				Roles:        []user.Role{user.RoleAdmin},
-				PasswordHash: hashed,
-				Enabled:      true,
-				CreatedAt:    now,
-				UpdatedAt:    now,
-			},
+			userId:      user2Id.String(),
+			user:        admin,
 			expectError: false,
 			statusCode:  http.StatusNoContent,
 		},
+
 		"random user trying to delete another user": {
-			userId: "3dc3bbbc-811a-4bb8-a6fc-fccd709e8158",
-			user: user.User{
-				Id:   uuid.New(),
-				Name: "Random",
-				Email: mail.Address{
-					Name:    "Random",
-					Address: "random@random.com",
-				},
-				Roles: []user.Role{user.RoleUser},
-			},
+			userId:      adminId.String(),
+			user:        randomUser,
 			expectError: true,
 			statusCode:  http.StatusUnauthorized,
 		},
 		"admin deleting not found user": {
-			userId: uuid.NewString(),
-			user: user.User{
-				Id:   adminId,
-				Name: "Admin",
-				Email: mail.Address{
-					Name:    "Admin",
-					Address: "admin@gmail.com",
-				},
-				Roles:        []user.Role{user.RoleAdmin},
-				PasswordHash: hashed,
-				Enabled:      true,
-				CreatedAt:    now,
-				UpdatedAt:    now,
-			},
+			userId:      uuid.NewString(),
+			user:        admin,
 			expectError: true,
 			statusCode:  http.StatusNotFound,
 		},
 		"unauthenticated user trying to delelte": {
-			userId:          "3dc3bbbc-811a-4bb8-a6fc-fccd709e8158",
+			userId:          uuid.NewString(),
 			expectError:     true,
 			statusCode:      http.StatusUnauthorized,
 			unauthenticated: true,
@@ -380,28 +417,9 @@ func TestDeleteUserById(t *testing.T) {
 			statusCode:  http.StatusBadRequest,
 		},
 	}
-
+	
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-
-			v, err := errs.NewAppValidator()
-			if err != nil {
-				t.Fatalf("expected to create the app validator: %s", err)
-			}
-
-			userRepo := memory.Repository{
-				Users: map[uuid.UUID]user.User{},
-			}
-			//add user
-			userRepo.Create(context.Background(), usr)
-
-			userService := user.NewService(&userRepo)
-
-			h := users.Handler{
-				Validator:    v,
-				UsersService: userService,
-			}
-
 			req := httptest.NewRequest(http.MethodDelete, "/v1/api/users/"+test.userId, nil)
 			w := httptest.NewRecorder()
 			req.SetPathValue("id", test.userId)
@@ -414,7 +432,7 @@ func TestDeleteUserById(t *testing.T) {
 				ctx = context.Background()
 			}
 
-			err = h.DeleteUserById(ctx, w, req)
+			err := h.DeleteUserById(ctx, w, req)
 			if !test.expectError {
 				//success path
 				if err != nil {
@@ -773,7 +791,7 @@ func TestUpdateRoles(t *testing.T) {
 
 			ctx := auth.SetUser(context.Background(), test.updater)
 
-			err = h.UpdateRole(ctx, w, r)
+			err := h.UpdateRole(ctx, w, r)
 
 			if !test.expectError {
 				if err != nil {
@@ -913,7 +931,7 @@ func TestSignup(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/v1/api/users/signup", &buff)
 			w := httptest.NewRecorder()
 
-			err = h.Signup(r.Context(), w, r)
+			err := h.Signup(r.Context(), w, r)
 			if !test.expectError {
 				if err != nil {
 					t.Fatalf("expected the user to signup: %s", err)
@@ -1065,7 +1083,7 @@ func TestLogin(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/v1/api/users/login", &buff)
 			w := httptest.NewRecorder()
 
-			err = h.Login(context.Background(), w, r)
+			err := h.Login(context.Background(), w, r)
 			if !test.expectError {
 
 				if err != nil {
