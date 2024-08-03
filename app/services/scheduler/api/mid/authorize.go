@@ -10,7 +10,7 @@ import (
 	"github.com/hamidoujand/task-scheduler/foundation/web"
 )
 
-func Authorized(a *auth.Auth, roles []user.Role) web.Middleware {
+func Authorized(a *auth.Auth, roles ...user.Role) web.Middleware {
 	return func(h web.Handler) web.Handler {
 		return func(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 			//get the user

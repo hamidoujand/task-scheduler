@@ -311,7 +311,7 @@ func TestAuthorized(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "/secret", nil)
 			w := httptest.NewRecorder()
 
-			mid := mid.Authorized(a, test.roles)
+			mid := mid.Authorized(a, test.roles...)
 			h := func(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
 				if !test.expectError {
