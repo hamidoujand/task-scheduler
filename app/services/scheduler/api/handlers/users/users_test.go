@@ -659,5 +659,311 @@ func TestUpdateUser(t *testing.T) {
 
 }
 
+func TestUpdateRoles(t *testing.T) {
+	//setup
+	hashed, err := bcrypt.GenerateFromPassword([]byte("test1234"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("expected to hash the password: %s", err)
+	}
+
+	v, err := errs.NewAppValidator()
+	if err != nil {
+		t.Fatalf("expected to create the app validator: %s", err)
+	}
+
+	userId := uuid.New()
+	adminId := uuid.New()
+	created := time.Now().Add(-time.Hour)
+
+	normal := user.User{
+		Id: userId,
+		Email: mail.Address{
+			Name:    "jane",
+			Address: "jane@gmail.com",
+		},
+		Name:         "Jane Doe",
+		Roles:        []user.Role{user.RoleUser},
+		PasswordHash: hashed,
+		Enabled:      true,
+		CreatedAt:    created,
+		UpdatedAt:    created,
+	}
+	admin := user.User{
+		Id:   adminId,
+		Name: "Admin",
+		Email: mail.Address{
+			Name:    "Admin",
+			Address: "admin@gmail.com",
+		},
+		Roles:        []user.Role{user.RoleAdmin},
+		PasswordHash: hashed,
+		Enabled:      true,
+		CreatedAt:    created,
+		UpdatedAt:    created,
+	}
+
+	userRepo := memory.Repository{
+		Users: map[uuid.UUID]user.User{
+			userId:  normal,
+			adminId: admin,
+		},
+	}
+
+	userService := user.NewService(&userRepo)
+
+	h := users.Handler{
+		Validator:    v,
+		UsersService: userService,
+	}
+
+	tests := map[string]struct {
+		input       []string
+		userId      uuid.UUID
+		updater     user.User
+		expectError bool
+		statusCode  int
+	}{
+		"sucess": {
+			input:       []string{"admin", "user"},
+			userId:      userId,
+			updater:     admin,
+			expectError: false,
+			statusCode:  http.StatusOK,
+		},
+
+		"random user updating roles": {
+			input:       []string{"admin"},
+			userId:      userId,
+			updater:     normal,
+			expectError: true,
+			statusCode:  http.StatusUnauthorized,
+		},
+		"admin updating a not found user": {
+			input:       []string{"user"},
+			userId:      uuid.New(),
+			updater:     admin,
+			expectError: true,
+			statusCode:  http.StatusNotFound,
+		},
+		"admin passing invalid roles": {
+			input:       []string{"ceo"},
+			userId:      userId,
+			updater:     admin,
+			expectError: true,
+			statusCode:  http.StatusBadRequest,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+
+			ur := users.UpdateRole{
+				Roles: test.input,
+			}
+			var buff bytes.Buffer
+			if err := json.NewEncoder(&buff).Encode(ur); err != nil {
+				t.Fatalf("expected to marshal roles: %s", err)
+			}
+
+			path := "/v1/api/users/" + test.userId.String()
+			r := httptest.NewRequest(http.MethodPut, path, &buff)
+			r.SetPathValue("id", test.userId.String())
+
+			w := httptest.NewRecorder()
+
+			ctx := auth.SetUser(context.Background(), test.updater)
+
+			err = h.UpdateRole(ctx, w, r)
+
+			if !test.expectError {
+				if err != nil {
+					t.Fatalf("expected to update the roles: %s", err)
+				}
+
+				statusCode := w.Result().StatusCode
+				if statusCode != test.statusCode {
+					t.Fatalf("statusCode= %d, got %d", http.StatusOK, statusCode)
+				}
+
+				var successResp users.User
+				if err := json.NewDecoder(w.Body).Decode(&successResp); err != nil {
+					t.Fatalf("expected to decode the response: %s", err)
+				}
+				for _, role := range ur.Roles {
+					if !slices.Contains(successResp.Roles, role) {
+						t.Errorf("expected role %q to in roles", role)
+					}
+				}
+
+			} else {
+
+				var appErr *errs.AppError
+				if !errors.As(err, &appErr) {
+					t.Fatalf("expected the error type to be *appError, got: %T", err)
+				}
+
+				if appErr.Code != test.statusCode {
+					t.Errorf("status= %d, got %d", test.statusCode, appErr.Code)
+				}
+			}
+
+		})
+	}
+
+}
+
+const (
+	kid = "s4sKIjD9kIRjxs2tulPqGLdxSfgPErRN1Mu3Hd9k9NQ"
+)
+
+func TestSignup(t *testing.T) {
+	//setup
+	hashed, err := bcrypt.GenerateFromPassword([]byte("test1234"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("expected to hash the password: %s", err)
+	}
+
+	v, err := errs.NewAppValidator()
+	if err != nil {
+		t.Fatalf("expected to create the app validator: %s", err)
+	}
+
+	userId := uuid.New()
+	created := time.Now().Add(-time.Hour)
+
+	random := user.User{
+		Id: userId,
+		Email: mail.Address{
+			Name:    "jane",
+			Address: "jane@gmail.com",
+		},
+		Name:         "Jane Doe",
+		Roles:        []user.Role{user.RoleUser},
+		PasswordHash: hashed,
+		Enabled:      true,
+		CreatedAt:    created,
+		UpdatedAt:    created,
+	}
+	userRepo := memory.Repository{
+		Users: map[uuid.UUID]user.User{
+			userId: random,
+		},
+	}
+	ks := auth.NewMockKeyStore(t)
+	userService := user.NewService(&userRepo)
+	a := auth.New(ks, userService)
+	tokenExpiresAt := time.Now().Add(time.Hour)
+
+	h := users.Handler{
+		Validator:      v,
+		UsersService:   userService,
+		Auth:           a,
+		ActiveKID:      kid,
+		TokenExpiresAt: tokenExpiresAt,
+	}
+
+	tests := map[string]struct {
+		input       users.SignUp
+		expectError bool
+		statusCode  int
+		fields      []string
+	}{
+		"success": {
+			input: users.SignUp{
+				Name:            "John Doe",
+				Email:           "john@gmail.com",
+				Password:        "test1234",
+				PasswordConfirm: "test1234",
+			},
+			expectError: false,
+			statusCode:  http.StatusCreated,
+		},
+		"using duplicated email": {
+			input: users.SignUp{
+				Name:            "Jane Doe",
+				Email:           "jane@gmail.com",
+				Password:        "test1234",
+				PasswordConfirm: "test1234",
+			},
+			expectError: true,
+			statusCode:  http.StatusConflict,
+		},
+		"invalid input": {
+			input: users.SignUp{
+				Name:            "ss",
+				Email:           "sa",
+				Password:        "sa",
+				PasswordConfirm: "sas",
+			},
+			expectError: true,
+			statusCode:  http.StatusBadRequest,
+			fields:      []string{"name", "email", "password", "passwordConfirm"},
+		},
+	}
+
+	for name, test := range tests {
+
+		t.Run(name, func(t *testing.T) {
+
+			var buff bytes.Buffer
+			if err := json.NewEncoder(&buff).Encode(test.input); err != nil {
+				t.Fatalf("expected the input to be encoded to json: %s", err)
+			}
+
+			r := httptest.NewRequest(http.MethodPost, "/v1/api/users", &buff)
+			w := httptest.NewRecorder()
+
+			err = h.Signup(r.Context(), w, r)
+			if !test.expectError {
+				if err != nil {
+					t.Fatalf("expected the user to signup: %s", err)
+				}
+
+				statusCode := w.Result().StatusCode
+				if statusCode != test.statusCode {
+					t.Fatalf("status= %d, got %d", test.statusCode, statusCode)
+				}
+				var successResp users.User
+				if err := json.NewDecoder(w.Body).Decode(&successResp); err != nil {
+					t.Fatalf("expected to decode the response body: %s", err)
+				}
+				if successResp.Token == "" {
+					t.Errorf("token= %s, got %s", "<jwt>", successResp.Token)
+				}
+
+				bearer := "Bearer " + successResp.Token
+
+				usr, err := h.Auth.ValidateToken(context.Background(), bearer)
+				if err != nil {
+					t.Fatalf("expected the token to be valid: %s", err)
+				}
+
+				if usr.Id.String() != successResp.ID {
+					t.Errorf("user.Id= %s, got %s", successResp.ID, usr.Id.String())
+				}
+			} else {
+				var appErr *errs.AppError
+				if !errors.As(err, &appErr) {
+					t.Fatalf("expected the error type to be *appError, got: %T", err)
+				}
+
+				if appErr.Code != test.statusCode {
+					t.Errorf("status= %d, got %d", test.statusCode, appErr.Code)
+				}
+
+				if appErr.Fields != nil {
+					for name := range appErr.Fields {
+						if !slices.Contains(test.fields, name) {
+							t.Errorf("expected field %s to be invalid", name)
+						}
+					}
+				}
+			}
+		})
+
+	}
+
+}
+
 func stringPointer(str string) *string { return &str }
 func boolPointer(b bool) *bool         { return &b }

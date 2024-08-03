@@ -15,6 +15,7 @@ type User struct {
 	Email        string    `json:"email"`
 	Roles        []string  `json:"roles"`
 	PasswordHash []byte    `json:"-"`
+	Token        string    `json:"token,omitempty"`
 	Enabled      bool      `json:"enabled"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
@@ -27,6 +28,19 @@ func toAppUser(usr user.User) User {
 		Email:        usr.Email.Address,
 		Roles:        user.EncodeRoles(usr.Roles),
 		PasswordHash: usr.PasswordHash,
+		Enabled:      usr.Enabled,
+		CreatedAt:    usr.CreatedAt,
+		UpdatedAt:    usr.UpdatedAt,
+	}
+}
+func toAppUserWithToken(usr user.User, token string) User {
+	return User{
+		ID:           usr.Id.String(),
+		Name:         usr.Name,
+		Email:        usr.Email.Address,
+		Roles:        user.EncodeRoles(usr.Roles),
+		PasswordHash: usr.PasswordHash,
+		Token:        token,
 		Enabled:      usr.Enabled,
 		CreatedAt:    usr.CreatedAt,
 		UpdatedAt:    usr.UpdatedAt,
@@ -68,20 +82,41 @@ type UpdateUser struct {
 	PasswordConfirm *string `json:"passowordConfirm" validate:"omitempty,eqfield=Password"`
 }
 
-func (u UpdateUser) toServiceUpdateUser() (user.UpdateUser, error) {
-	var email *mail.Address
-	if u.Email != nil {
-		var err error
-		email, err = mail.ParseAddress(*u.Email)
-		if err != nil {
-			return user.UpdateUser{}, fmt.Errorf("parsing email: %w", err)
-		}
-	}
-
+func (u UpdateUser) toServiceUpdateUser() user.UpdateUser {
 	return user.UpdateUser{
-		Name:     u.Name,
-		Email:    email,
+		Name: u.Name,
+		Email: &mail.Address{
+			Name:    *u.Name,
+			Address: *u.Email,
+		},
 		Password: u.Password,
 		Enabled:  u.Enabled,
-	}, nil
+	}
+}
+
+// UpdateRole represents required data for updating roles
+type UpdateRole struct {
+	//TODO search validator package for better enum like validation.
+	Roles []string `json:"roles" validate:"required"`
+}
+
+// SignUp represents all of required data for signup.
+type SignUp struct {
+	Name            string `json:"name" validate:"required"`
+	Email           string `json:"email" validate:"required,email"`
+	Password        string `json:"password" validate:"required,min=8"`
+	PasswordConfirm string `json:"passwordConfirm" validate:"required,eqfield=Password"`
+}
+
+func (si SignUp) toServiceNewUser() user.NewUser {
+
+	return user.NewUser{
+		Name: si.Name,
+		Email: mail.Address{
+			Name:    si.Name,
+			Address: si.Email,
+		},
+		Roles:    []user.Role{user.RoleUser},
+		Password: si.Password,
+	}
 }
