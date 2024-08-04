@@ -25,19 +25,19 @@ type Claims struct {
 }
 
 // keystore represents the set of behaviours required by auth package to lookup private and public keys.
-type keystore interface {
+type Keystore interface {
 	PrivateKey(kid string) (string, error)
 	PublicKey(kid string) (string, error)
 }
 
 // Auth represents the set of APIs used for authentication and authorization.
 type Auth struct {
-	keystore    keystore
+	keystore    Keystore
 	userService *user.Service
 }
 
 // New creates an auth instance with provided keystore.
-func New(ks keystore, userService *user.Service) *Auth {
+func New(ks Keystore, userService *user.Service) *Auth {
 	return &Auth{
 		keystore:    ks,
 		userService: userService,
