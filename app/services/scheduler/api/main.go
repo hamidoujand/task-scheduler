@@ -55,7 +55,7 @@ func run() error {
 
 		Auth struct {
 			KeysFolder string        `conf:"default:/zarf/keys/"`
-			ActiveKid  string        `conf:"default:<filename>"`
+			ActiveKid  string        `conf:"default:a41bace0-da3c-4119-85ad-bbd293bf31ee"`
 			Issuer     string        `conf:"default:task scheduler"`
 			TokenAge   time.Duration `conf:"default:1y"`
 		}
