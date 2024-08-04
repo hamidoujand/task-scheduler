@@ -19,11 +19,6 @@ const (
 	kid = "s4sKIjD9kIRjxs2tulPqGLdxSfgPErRN1Mu3Hd9k9NQ"
 )
 
-type mockKeyStore struct {
-	privateKey string
-	publicKey  string
-}
-
 func TestToken(t *testing.T) {
 	ks := auth.NewMockKeyStore(t)
 	usrId := uuid.New()
