@@ -19,11 +19,11 @@ import (
 
 // Handler represents set of APIs used
 type Handler struct {
-	Validator      *errs.AppValidator
-	UsersService   *user.Service
-	Auth           *auth.Auth
-	ActiveKID      string
-	TokenExpiresAt time.Time
+	Validator    *errs.AppValidator
+	UsersService *user.Service
+	Auth         *auth.Auth
+	ActiveKID    string
+	TokenAge     time.Duration
 }
 
 // CreateUser creates a user inside the system, returns errors on duplicated emails and invalid inputs.
@@ -235,7 +235,7 @@ func (h *Handler) Signup(ctx context.Context, w http.ResponseWriter, r *http.Req
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "task-scheduler",
 			Subject:   newUser.Id.String(),
-			ExpiresAt: jwt.NewNumericDate(h.TokenExpiresAt),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(h.TokenAge)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
@@ -282,7 +282,7 @@ func (h *Handler) Login(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "task-scheduler",
 			Subject:   usr.Id.String(),
-			ExpiresAt: jwt.NewNumericDate(h.TokenExpiresAt),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(h.TokenAge)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}

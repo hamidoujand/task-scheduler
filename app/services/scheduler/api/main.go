@@ -15,6 +15,7 @@ import (
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/handlers"
 	"github.com/hamidoujand/task-scheduler/business/database/postgres"
+	"github.com/hamidoujand/task-scheduler/foundation/keystore"
 	"github.com/hamidoujand/task-scheduler/foundation/logger"
 )
 
@@ -50,6 +51,13 @@ func run() error {
 			MaxIdleConnTime time.Duration `conf:"default:5m"`
 			MaxConnLifeTime time.Duration `conf:"default:10m"`
 			DisableTLS      bool          `conf:"default:true"`
+		}
+
+		Auth struct {
+			KeysFolder string        `conf:"default:/zarf/keys/"`
+			ActiveKid  string        `conf:"default:<filename>"`
+			Issuer     string        `conf:"default:task scheduler"`
+			TokenAge   time.Duration `conf:"default:1y"`
 		}
 	}{}
 
@@ -113,6 +121,16 @@ func run() error {
 		return fmt.Errorf("running migrations: %w", err)
 	}
 	logger.Info("database", "status", "ready to use")
+
+	//==========================================================================
+	//keystore
+	logger.Info("keystore", "status", "initializing keystore support")
+
+	ks, err := keystore.LoadFromFS(os.DirFS(configs.Auth.KeysFolder))
+	if err != nil {
+		return fmt.Errorf("loadFromFS: %w", err)
+	}
+
 	//==========================================================================
 	//server
 
@@ -121,7 +139,15 @@ func run() error {
 
 	signal.Notify(shutdownCh, syscall.SIGTERM, syscall.SIGINT)
 
-	app := handlers.RegisterRoutes(shutdownCh, logger, appValidator, client)
+	app := handlers.RegisterRoutes(handlers.Config{
+		Shutdown:       shutdownCh,
+		Logger:         logger,
+		Validator:      appValidator,
+		PostgresClient: client,
+		ActiveKID:      configs.Auth.ActiveKid,
+		TokenAge:       configs.Auth.TokenAge,
+		Keystore:       ks,
+	})
 
 	srv := http.Server{
 		Addr:        configs.API.Host,

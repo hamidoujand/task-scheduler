@@ -4,9 +4,12 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
+	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/auth"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/handlers/tasks"
+	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/handlers/users"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/mid"
 	"github.com/hamidoujand/task-scheduler/business/database/postgres"
 	"github.com/hamidoujand/task-scheduler/business/domain/task"
@@ -16,29 +19,72 @@ import (
 	"github.com/hamidoujand/task-scheduler/foundation/web"
 )
 
-func RegisterRoutes(shutdown chan os.Signal, logger *slog.Logger, validator *errs.AppValidator, dbClient *postgres.Client) *web.App {
-	app := web.NewApp(shutdown,
-		mid.Logger(logger),
-		mid.Errors(logger),
+type Config struct {
+	Shutdown       chan os.Signal
+	Logger         *slog.Logger
+	Validator      *errs.AppValidator
+	PostgresClient *postgres.Client
+	ActiveKID      string
+	TokenAge       time.Duration
+	Keystore       auth.Keystore
+}
+
+func RegisterRoutes(conf Config) *web.App {
+	//==============================================================================
+	//setup
+	const version = "v1"
+	app := web.NewApp(conf.Shutdown,
+		mid.Logger(conf.Logger),
+		mid.Errors(conf.Logger),
 		mid.Panics(),
 	)
 
-	taskRepo := taskPostgresRepo.NewRepository(dbClient)
+	taskRepo := taskPostgresRepo.NewRepository(conf.PostgresClient)
 	taskService := task.NewService(taskRepo)
 
-	userRepo := userPostgresRepo.NewRepository(dbClient)
+	userRepo := userPostgresRepo.NewRepository(conf.PostgresClient)
 	userService := user.NewService(userRepo)
 
 	taskHandler := tasks.Handler{
-		Validator:   validator,
+		Validator:   conf.Validator,
 		TaskService: taskService,
 		UserService: userService,
 	}
+
+	//setup auth
+	auth := auth.New(conf.Keystore, userService)
+
+	userHandler := users.Handler{
+		Validator:    conf.Validator,
+		UsersService: userService,
+		Auth:         auth,
+		ActiveKID:    conf.ActiveKID,
+		TokenAge:     conf.TokenAge,
+	}
+
 	//==============================================================================
 	//tasks
-	app.HandleFunc(http.MethodPost, "v1", "/api/tasks/", taskHandler.CreateTask)
-	app.HandleFunc(http.MethodGet, "v1", "/api/tasks/{id}", taskHandler.GetTaskById)
-	app.HandleFunc(http.MethodDelete, "v1", "/api/tasks/{id}", taskHandler.DeleteTaskById)
+	app.HandleFunc(http.MethodPost, version, "/api/tasks/", taskHandler.CreateTask)
+	app.HandleFunc(http.MethodGet, version, "/api/tasks/{id}", taskHandler.GetTaskById)
+	app.HandleFunc(http.MethodDelete, version, "/api/tasks/{id}", taskHandler.DeleteTaskById)
+
+	//==============================================================================
+	//users
+	app.HandleFunc(http.MethodPost, version, "/api/users", userHandler.CreateUser,
+		mid.Authenticate(auth),
+		mid.Authorized(auth, user.RoleAdmin),
+	)
+
+	app.HandleFunc(http.MethodGet, version, "/api/users/{id}", userHandler.GetUserById)
+	app.HandleFunc(http.MethodPut, version, "/api/users/{id}", userHandler.UpdateUser, mid.Authenticate(auth))
+	app.HandleFunc(http.MethodDelete, version, "/api/users/{id}", userHandler.DeleteUserById, mid.Authenticate(auth))
+	app.HandleFunc(http.MethodPost, version, "/api/users/signup", userHandler.Signup)
+
+	app.HandleFunc(http.MethodPut, version, "/api/users/role", userHandler.UpdateRole,
+		mid.Authenticate(auth),
+		mid.Authorized(auth, user.RoleAdmin))
+
+	app.HandleFunc(http.MethodPost, version, "/api/users/login", userHandler.Login)
 
 	return app
 }

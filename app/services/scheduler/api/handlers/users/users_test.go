@@ -417,7 +417,7 @@ func TestDeleteUserById(t *testing.T) {
 			statusCode:  http.StatusBadRequest,
 		},
 	}
-	
+
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodDelete, "/v1/api/users/"+test.userId, nil)
@@ -870,14 +870,13 @@ func TestSignup(t *testing.T) {
 	ks := auth.NewMockKeyStore(t)
 	userService := user.NewService(&userRepo)
 	a := auth.New(ks, userService)
-	tokenExpiresAt := time.Now().Add(time.Hour)
 
 	h := users.Handler{
-		Validator:      v,
-		UsersService:   userService,
-		Auth:           a,
-		ActiveKID:      kid,
-		TokenExpiresAt: tokenExpiresAt,
+		Validator:    v,
+		UsersService: userService,
+		Auth:         a,
+		ActiveKID:    kid,
+		TokenAge:     time.Duration(time.Hour),
 	}
 
 	tests := map[string]struct {
@@ -1020,14 +1019,13 @@ func TestLogin(t *testing.T) {
 	ks := auth.NewMockKeyStore(t)
 	userService := user.NewService(&userRepo)
 	a := auth.New(ks, userService)
-	tokenExpiresAt := time.Now().Add(time.Hour)
 
 	h := users.Handler{
-		Validator:      v,
-		UsersService:   userService,
-		Auth:           a,
-		ActiveKID:      kid,
-		TokenExpiresAt: tokenExpiresAt,
+		Validator:    v,
+		UsersService: userService,
+		Auth:         a,
+		ActiveKID:    kid,
+		TokenAge:     time.Duration(time.Hour),
 	}
 
 	tests := map[string]struct {
