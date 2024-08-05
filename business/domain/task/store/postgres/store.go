@@ -11,6 +11,13 @@ import (
 	"github.com/hamidoujand/task-scheduler/business/domain/task"
 )
 
+var columnNames = map[task.Field]string{
+	task.FieldCommand:     "command",
+	task.FieldCreatedAt:   "created_at",
+	task.FieldScheduledAt: "scheduled_at",
+	task.FieldID:          "id",
+}
+
 // Store represents apis used to interact with database.
 type Repository struct {
 	client *postgres.Client
@@ -130,22 +137,31 @@ func (s *Repository) GetById(ctx context.Context, taskId uuid.UUID) (task.Task, 
 	return dbTask.toDomainTask(), nil
 }
 
-func (r *Repository) GetByUserId(ctx context.Context, userId uuid.UUID) ([]task.Task, error) {
-	const q = `
-	SELECT 
-		id,user_id,command,array_to_json(args) as args,status,result,error_msg,scheduled_at,created_at,updated_at
-	FROM 
-		tasks
-	WHERE 
-		user_id = $1		
-	`
-	var results []task.Task
-	rows, err := r.client.DB.QueryContext(ctx, q, userId)
+func (r *Repository) GetByUserId(ctx context.Context, userId uuid.UUID, rowsPerPage int, pageNumber int, order task.OrderBy) ([]task.Task, error) {
+	offset := (pageNumber - 1) * rowsPerPage
 
+	col, exist := columnNames[order.Field]
+	if !exist {
+		return nil, fmt.Errorf("invalid column name %q", order.Field)
+	}
+
+	// for direction we have enum "ASC" and "DESC" and for column names also we use "Enum like" code so no risk of sql
+	// injection in here.
+
+	q := fmt.Sprintf(`
+	SELECT
+		id,user_id,command,array_to_json(args) as args,status,result,error_msg,scheduled_at,created_at,updated_at
+	FROM tasks
+	WHERE user_id = $1
+	ORDER BY %s %s OFFSET $2 ROWS FETCH NEXT $3 ROWS ONLY	
+	`, col, order.Direction.String())
+
+	rows, err := r.client.DB.QueryContext(ctx, q, userId, offset, rowsPerPage)
 	if err != nil {
 		return nil, fmt.Errorf("queryContext: %w", err)
 	}
 
+	var results []task.Task
 	for rows.Next() {
 		var dbTask Task
 		var commandArgs any
@@ -172,7 +188,6 @@ func (r *Repository) GetByUserId(ctx context.Context, userId uuid.UUID) ([]task.
 		}
 
 		dbTask.Args = args
-
 		results = append(results, dbTask.toDomainTask())
 	}
 

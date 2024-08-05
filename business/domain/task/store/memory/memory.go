@@ -51,7 +51,7 @@ func (r *Repository) GetById(ctx context.Context, taskId uuid.UUID) (task.Task, 
 	}
 }
 
-func (r *Repository) GetByUserId(ctx context.Context, userId uuid.UUID) ([]task.Task, error) {
+func (r *Repository) GetByUserId(ctx context.Context, userId uuid.UUID, rows int, page int, order task.OrderBy) ([]task.Task, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var results []task.Task

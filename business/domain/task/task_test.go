@@ -202,7 +202,14 @@ func TestGetTasksByUserId(t *testing.T) {
 	}
 	service := task.NewService(&store)
 
-	tasks, err := service.GetTasksByUserId(context.Background(), userId)
+	page := 1
+	rows := 3
+	order := task.OrderBy{
+		Field:     task.FieldCommand,
+		Direction: task.DirectionDESC,
+	}
+
+	tasks, err := service.GetTasksByUserId(context.Background(), userId, rows, page, order)
 	if err != nil {
 		t.Fatalf("expected to get tasks related to user %s: %s", userId, err)
 	}
@@ -216,4 +223,85 @@ func TestGetTasksByUserId(t *testing.T) {
 			t.Errorf("task.UserId= %s, got %s", userId, tsk.UserId)
 		}
 	}
+}
+
+func TestParseField(t *testing.T) {
+	tests := map[string]struct {
+		input         string
+		expectError   bool
+		successResult task.Field
+	}{
+		"command field": {
+			input:         "command",
+			expectError:   false,
+			successResult: task.FieldCommand,
+		},
+		"unknown field": {
+			input:       ";SELECT",
+			expectError: true,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			field, err := task.ParseField(test.input)
+
+			if !test.expectError {
+				if err != nil {
+					t.Fatalf("expected to parse the direction: %s", err)
+				}
+
+				if field != task.Field(test.successResult) {
+					t.Errorf("field= %s, got %s", test.successResult, field)
+				}
+			} else {
+				if err == nil {
+					t.Fatalf("expected to fail when parsin unknown fields")
+				}
+			}
+		})
+
+	}
+
+}
+
+func TestParseDirection(t *testing.T) {
+	tests := map[string]struct {
+		input         string
+		expectError   bool
+		successResult task.Direction
+	}{
+		"ASC": {
+			input:         "asc",
+			expectError:   false,
+			successResult: task.DirectionASC,
+		},
+		"unknown dir": {
+			input:       ";DELETE",
+			expectError: true,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			field, err := task.ParseDirection(test.input)
+
+			if !test.expectError {
+				if err != nil {
+					t.Fatalf("expected to parse the direction: %s", err)
+				}
+
+				if field != test.successResult {
+					t.Errorf("field= %s, got %s", test.successResult, field)
+				}
+			} else {
+				t.Log(err)
+				if err == nil {
+					t.Fatalf("expected to fail when parsin unknown dir")
+				}
+			}
+		})
+
+	}
+
 }

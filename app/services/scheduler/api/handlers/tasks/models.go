@@ -9,6 +9,7 @@ import (
 // Task represents a task that goes to client
 type Task struct {
 	Id          string    `json:"id"`
+	UserId      string    `json:"user_id"`
 	Command     string    `json:"command"`
 	Args        []string  `json:"args"`
 	Status      string    `json:"status"`
@@ -22,6 +23,7 @@ type Task struct {
 func fromDomainTask(t task.Task) Task {
 	return Task{
 		Id:          t.Id.String(),
+		UserId:      t.UserId.String(),
 		Command:     t.Command,
 		Args:        t.Args,
 		Status:      t.Status.String(),

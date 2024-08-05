@@ -20,7 +20,7 @@ type store interface {
 	Update(ctx context.Context, task Task) error
 	Delete(ctx context.Context, task Task) error
 	GetById(ctx context.Context, taskId uuid.UUID) (Task, error)
-	GetByUserId(ctx context.Context, userId uuid.UUID) ([]Task, error)
+	GetByUserId(ctx context.Context, userId uuid.UUID, rows int, page int, order OrderBy) ([]Task, error)
 }
 
 // Service represents set of APIs for accessing tasks.
@@ -38,6 +38,7 @@ func (s *Service) CreateTask(ctx context.Context, nt NewTask) (Task, error) {
 
 	task := Task{
 		Id:          uuid.New(),
+		UserId:      nt.UserId,
 		Command:     nt.Command,
 		Args:        nt.Args,
 		Status:      StatusPending,
@@ -97,8 +98,8 @@ func (s *Service) UpdateTask(ctx context.Context, task Task, ut UpdateTask) (Tas
 }
 
 // GetTaskByUserId queries all of the taks belong to a user and retunrs them or possible error.
-func (s *Service) GetTasksByUserId(ctx context.Context, userId uuid.UUID) ([]Task, error) {
-	tasks, err := s.store.GetByUserId(ctx, userId)
+func (s *Service) GetTasksByUserId(ctx context.Context, userId uuid.UUID, rowsPerPage int, page int, order OrderBy) ([]Task, error) {
+	tasks, err := s.store.GetByUserId(ctx, userId, rowsPerPage, page, order)
 	if err != nil {
 		return nil, fmt.Errorf("getByUserId: %w", err)
 	}

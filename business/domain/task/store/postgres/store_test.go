@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"math/rand"
 	"slices"
 	"testing"
 	"time"
@@ -196,72 +198,140 @@ func TestGetByUserId(t *testing.T) {
 	t.Parallel()
 
 	client := dbtest.NewDatabaseClient(t, "test_task_getByUserId")
-	store := postgresRepo.NewRepository(client)
+	repo := postgresRepo.NewRepository(client)
 
-	//seed
-	userId, commands := seedRandomTasks(t, store)
+	userId, commands := seedTasks(t, repo)
 
-	usersTasks, err := store.GetByUserId(context.Background(), userId)
-	if err != nil {
-		t.Fatalf("expected to get all tasks created by user %q: %s", userId, err)
+	tests := map[string]struct {
+		page           int
+		rows           int
+		order          task.OrderBy
+		expectedResult int
+	}{
+		"all user's tasks": {
+			page: 1,
+			rows: len(commands),
+			order: task.OrderBy{
+				Field:     task.FieldCreatedAt,
+				Direction: task.DirectionDESC,
+			},
+			expectedResult: len(commands),
+		},
+
+		"page 1 only 4 tasks": {
+			page: 1,
+			rows: 4,
+			order: task.OrderBy{
+				Field:     task.FieldCreatedAt,
+				Direction: task.DirectionDESC,
+			},
+			expectedResult: 4,
+		},
+
+		"ordered by command": {
+			page: 1,
+			rows: len(commands),
+			order: task.OrderBy{
+				Field:     task.FieldCommand,
+				Direction: task.DirectionDESC,
+			},
+			expectedResult: len(commands),
+		},
+
+		"ordered by command page 1 rows 2": {
+			page: 1,
+			rows: 2,
+			order: task.OrderBy{
+				Field:     task.FieldCommand,
+				Direction: task.DirectionDESC,
+			},
+			expectedResult: 2,
+		},
 	}
 
-	if len(usersTasks) != 4 {
-		t.Errorf("expected the length of usersTasks to be %d, got %d", len(commands), len(usersTasks))
-	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			userTasks, err := repo.GetByUserId(context.Background(), userId, test.rows, test.page, test.order)
+			if err != nil {
+				t.Fatalf("expect to fetch all tasks for user %q: %s", userId, err)
+			}
 
-	for _, task := range usersTasks {
-		if !slices.Contains(commands, task.Command) {
-			t.Errorf("%s, not exists inside of commands slice", task.Command)
-		}
-
-		if task.UserId != userId {
-			t.Errorf("expected the user id for all tasks to be %s, got %s", userId, task.UserId)
-		}
-
-		if task.Command == "ls" {
-			//check for parsed args
-			args := []string{"-l", "-a"}
-			for _, arg := range task.Args {
-				if !slices.Contains(args, arg) {
-					t.Errorf("expected %s arg to be in args slice", arg)
+			if len(userTasks) != test.expectedResult {
+				t.Fatalf("len(tasks)=%d, got %d", len(commands), len(userTasks))
+			}
+			if name == "all" {
+				for _, tsk := range userTasks {
+					if !slices.Contains(commands, tsk.Command) {
+						t.Errorf("expect command %q to be in commands slice", tsk.Command)
+					}
 				}
 			}
-		} else {
-			//no args should be parsed to nil
-			if task.Args != nil {
-				t.Errorf("args should be nil for command %s, got %v", task.Command, task.Args)
-			}
-		}
-	}
 
+			if name == "ordered by command" {
+				cmds := make([]string, len(commands))
+				copy(cmds, commands)
+				slices.Sort(cmds)
+				slices.Reverse(cmds)
+
+				for i, tsk := range userTasks {
+					if tsk.Command != cmds[i] {
+						t.Errorf("expected the data to be in order: got[%s] want [%s]", tsk.Command, cmds[i])
+					}
+				}
+			}
+
+			if name == "ordered by command page 1 rows 2" {
+				cmds := make([]string, len(commands))
+				copy(cmds, commands)
+				slices.Sort(cmds)
+				slices.Reverse(cmds)
+				cmds = cmds[:2]
+
+				for i, tsk := range userTasks {
+					if tsk.Command != cmds[i] {
+						t.Errorf("expected the data to be in order: got[%s] want [%s]", tsk.Command, cmds[i])
+					}
+				}
+			}
+		})
+	}
 }
 
-func seedRandomTasks(t *testing.T, s *postgresRepo.Repository) (uuid.UUID, []string) {
+func seedTasks(t *testing.T, repo *postgresRepo.Repository) (uuid.UUID, []string) {
 	userId := uuid.New()
-	commands := []string{"ls", "date", "ps", "top"}
-	now := time.Now()
+	commands := []string{"ls", "wc", "ab", "bc", "ps", "cc", "dd", "date"}
 
-	for _, c := range commands {
-		task := task.Task{
+	status := []task.Status{task.StatusCompleted, task.StatusFailed, task.StatusPending}
+
+	for i, command := range commands {
+		createdAt := time.Now().Add(time.Hour * time.Duration(i))
+		scheduledAt := time.Now().AddDate(0, 0, i)
+		idxStatus := rand.Intn(len(status))
+		tsk := task.Task{
 			Id:          uuid.New(),
 			UserId:      userId,
-			Command:     c,
-			Status:      task.StatusCompleted,
-			Result:      "data",
-			CreatedAt:   now,
-			ScheduledAt: now,
-			UpdatedAt:   now,
-			ErrMessage:  "",
+			Command:     command,
+			Status:      status[idxStatus],
+			ScheduledAt: scheduledAt,
+			CreatedAt:   createdAt,
+			UpdatedAt:   createdAt,
 		}
 
-		if c == "ls" {
-			task.Args = []string{"-l", "-a"}
+		if tsk.Command == "ls" {
+			tsk.Args = []string{"-l", "-a"}
 		}
 
-		err := s.Create(context.Background(), task)
+		if tsk.Status == task.StatusCompleted {
+			tsk.Result = fmt.Sprintf("data%d", i)
+		}
+
+		if tsk.Status == task.StatusFailed {
+			tsk.ErrMessage = fmt.Sprintf("error%d", i)
+		}
+
+		err := repo.Create(context.Background(), tsk)
 		if err != nil {
-			t.Fatalf("expected to seed database for getByUserId: %s", err)
+			t.Fatalf("expected to create task: %s", err)
 		}
 	}
 	return userId, commands
