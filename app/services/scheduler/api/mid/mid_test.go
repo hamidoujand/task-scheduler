@@ -315,11 +315,11 @@ func TestAuthorized(t *testing.T) {
 			h := func(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 
 				if !test.expectError {
-					u, err := auth.GetUser(ctx)
+					_, err := auth.GetUser(ctx)
 					if err != nil {
 						t.Fatalf("expected authorized user to get into handler: %s", err)
 					}
-					t.Logf("%+v\n", u)
+
 				}
 				return nil
 			}

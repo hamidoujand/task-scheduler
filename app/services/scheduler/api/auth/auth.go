@@ -169,9 +169,6 @@ type mockKeyStore struct {
 
 func NewMockKeyStore(t *testing.T) mockKeyStore {
 	private, public := generateKeys(t)
-	fmt.Printf("private:\n%s\n", private)
-	fmt.Println("filename:", uuid.NewString())
-
 	return mockKeyStore{
 		privateKey: private,
 		publicKey:  public,
