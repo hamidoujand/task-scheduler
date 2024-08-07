@@ -31,6 +31,8 @@ func TestCreate(t *testing.T) {
 		UserId:      userId,
 		Command:     "ls",
 		Args:        []string{"-1", "-a"},
+		Image:       "alpine:3.20",
+		Environment: "APP_NAME=test",
 		Status:      task.StatusPending,
 		ScheduledAt: now.Add(time.Hour * 10),
 		CreatedAt:   now,
@@ -56,6 +58,8 @@ func TestGetById(t *testing.T) {
 		Id:          id,
 		UserId:      userId,
 		Command:     "date",
+		Image:       "alpine:3.20",
+		Environment: "APP_NAME=test",
 		Args:        nil,
 		Status:      task.StatusPending,
 		ScheduledAt: now.Add(time.Hour * 10),
@@ -92,6 +96,14 @@ func TestGetById(t *testing.T) {
 	if tsk.UserId != userId {
 		t.Errorf("expected userId to be %s, got %s", userId, tsk.UserId)
 	}
+
+	if tsk.Image != tt.Image {
+		t.Errorf("image=%s, got %s", tt.Image, tsk.Image)
+	}
+
+	if tsk.Environment != tt.Environment {
+		t.Errorf("environment= %s, got %s", tt.Environment, tsk.Environment)
+	}
 }
 
 func TestUpdate(t *testing.T) {
@@ -109,6 +121,8 @@ func TestUpdate(t *testing.T) {
 		Id:          id,
 		UserId:      userId,
 		Command:     "ps",
+		Image:       "alpine:3.20",
+		Environment: "APP_NAME=test",
 		Status:      task.StatusPending,
 		ScheduledAt: now.Add(time.Hour * 10),
 		CreatedAt:   now,
@@ -125,6 +139,8 @@ func TestUpdate(t *testing.T) {
 		Command:     "ls",
 		Status:      task.StatusCompleted,
 		Result:      "data",
+		Image:       "alpine:3.20",
+		Environment: "APP_NAME=test",
 		ScheduledAt: now.Add(time.Hour * 10),
 		CreatedAt:   now,
 		UpdatedAt:   now.Add(time.Hour),
@@ -167,6 +183,8 @@ func TestDelete(t *testing.T) {
 		Id:          id,
 		UserId:      userId,
 		Command:     "ls",
+		Image:       "alpine:3.20",
+		Environment: "APP_NAME=test",
 		Args:        []string{"-l", "-a"},
 		Status:      task.StatusPending,
 		ScheduledAt: now.Add(time.Hour * 10),
@@ -311,6 +329,8 @@ func seedTasks(t *testing.T, repo *postgresRepo.Repository) (uuid.UUID, []string
 			Id:          uuid.New(),
 			UserId:      userId,
 			Command:     command,
+			Image:       "alpine:3.20",
+			Environment: "APP_NAME=test",
 			Status:      status[idxStatus],
 			ScheduledAt: scheduledAt,
 			CreatedAt:   createdAt,

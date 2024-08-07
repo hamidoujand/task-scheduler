@@ -62,8 +62,13 @@ func TestCreateTask(t *testing.T) {
 	}{
 		"success": {
 			input: tasks.NewTask{
-				Command:     "ls",
-				Args:        []string{"-l", "-a"},
+				Command: "ls",
+				Args:    []string{"-l", "-a"},
+				Image:   "alpine:3.20",
+				Environment: map[string]string{
+					"APP_NAME": "Test",
+					"Env":      "Dev",
+				},
 				ScheduledAt: time.Now().Add(time.Hour),
 			},
 			expectError: false,
@@ -77,12 +82,13 @@ func TestCreateTask(t *testing.T) {
 			},
 			expectError: true,
 			status:      http.StatusBadRequest,
-			fields:      []string{"command", "args", "scheduledAt"},
+			fields:      []string{"command", "args", "scheduledAt", "image"},
 		},
 
 		"unauthorized user": {
 			input: tasks.NewTask{
 				Command:     "date",
+				Image:       "alpine:3.20",
 				ScheduledAt: time.Now().Add(time.Hour),
 			},
 			expectError:  true,
@@ -136,6 +142,16 @@ func TestCreateTask(t *testing.T) {
 					t.Errorf("task.UserId=%s, got %s", taskCreator.Id, resp.UserId)
 				}
 
+				if resp.Image != test.input.Image {
+					t.Errorf("image= %s, got %s", test.input.Image, resp.Image)
+				}
+
+				for key, val := range test.input.Environment {
+					if resp.Environment[key] != val {
+						t.Errorf("expected env %q to have the same value as %q", key, val)
+					}
+				}
+
 				if resp.CreatedAt.IsZero() {
 					t.Error("expected the createdAt field to not be zero value")
 				}
@@ -156,9 +172,9 @@ func TestCreateTask(t *testing.T) {
 				}
 
 				if appErr.Fields != nil {
-					for name := range appErr.Fields {
+					for name, value := range appErr.Fields {
 						if !slices.Contains(test.fields, name) {
-							t.Errorf("expected field %s to be invalid", name)
+							t.Errorf("expected field %s to be invalid: %s", name, value)
 						}
 					}
 				}
@@ -338,10 +354,10 @@ func TestDeleteTaskById(t *testing.T) {
 	}
 	randomUser := user.User{
 		Id:   uuid.New(),
-		Name: "John Doe",
+		Name: "Random User",
 		Email: mail.Address{
-			Name:    "john",
-			Address: "john@gmail.com",
+			Name:    "random",
+			Address: "random@gmail.com",
 		},
 		Roles:        []user.Role{user.RoleUser},
 		PasswordHash: []byte("[hashed_pass]"),
@@ -351,10 +367,10 @@ func TestDeleteTaskById(t *testing.T) {
 	}
 	admin := user.User{
 		Id:   uuid.New(),
-		Name: "John Doe",
+		Name: "Admin",
 		Email: mail.Address{
-			Name:    "john",
-			Address: "john@gmail.com",
+			Name:    "admin",
+			Address: "admin@gmail.com",
 		},
 		Roles:        []user.Role{user.RoleAdmin},
 		PasswordHash: []byte("[hashed_pass]"),
@@ -380,7 +396,7 @@ func TestDeleteTaskById(t *testing.T) {
 
 	task2Id := uuid.New()
 	tsk2 := task.Task{
-		Id:          task1Id,
+		Id:          task2Id,
 		UserId:      taskCreator.Id,
 		Command:     "date",
 		Status:      task.StatusCompleted,

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/auth"
@@ -42,11 +43,19 @@ func (h *Handler) CreateTask(ctx context.Context, w http.ResponseWriter, r *http
 
 	//valid data
 
+	var builder strings.Builder
+	for key, val := range newTask.Environment {
+		builder.WriteString(key + "=" + val)
+		builder.WriteByte(' ')
+	}
+
 	domainTask := task.NewTask{
 		Command:     newTask.Command,
 		Args:        newTask.Args,
 		ScheduledAt: newTask.ScheduledAt,
 		UserId:      usr.Id,
+		Image:       newTask.Image,
+		Environment: builder.String(),
 	}
 
 	task, err := h.TaskService.CreateTask(ctx, domainTask)

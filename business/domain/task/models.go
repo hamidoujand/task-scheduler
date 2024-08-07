@@ -10,8 +10,10 @@ import (
 type Task struct {
 	Id          uuid.UUID
 	UserId      uuid.UUID
+	Image       string
 	Command     string
 	Args        []string
+	Environment string
 	Status      Status
 	Result      string
 	ErrMessage  string
@@ -25,6 +27,8 @@ type NewTask struct {
 	UserId      uuid.UUID
 	Command     string
 	Args        []string
+	Image       string
+	Environment string
 	ScheduledAt time.Time
 }
 

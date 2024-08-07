@@ -159,9 +159,9 @@ func TestCreateUser(t *testing.T) {
 
 				if failureResp.Fields != nil {
 					//look for invalid field names
-					for name := range failureResp.Fields {
+					for name, value := range failureResp.Fields {
 						if !slices.Contains(test.invalidFields, name) {
-							t.Errorf("expected %q field to be invalid", name)
+							t.Errorf("expected %q field to be invalid: %s", name, value)
 						}
 					}
 				}

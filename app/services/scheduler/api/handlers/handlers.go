@@ -64,9 +64,9 @@ func RegisterRoutes(conf Config) *web.App {
 
 	//==============================================================================
 	//tasks
-	app.HandleFunc(http.MethodPost, version, "/api/tasks/", taskHandler.CreateTask)
-	app.HandleFunc(http.MethodGet, version, "/api/tasks/{id}", taskHandler.GetTaskById)
-	app.HandleFunc(http.MethodDelete, version, "/api/tasks/{id}", taskHandler.DeleteTaskById)
+	app.HandleFunc(http.MethodPost, version, "/api/tasks/", taskHandler.CreateTask, mid.Authenticate(auth))
+	app.HandleFunc(http.MethodGet, version, "/api/tasks/{id}", taskHandler.GetTaskById, mid.Authenticate(auth))
+	app.HandleFunc(http.MethodDelete, version, "/api/tasks/{id}", taskHandler.DeleteTaskById, mid.Authenticate(auth))
 
 	//==============================================================================
 	//users

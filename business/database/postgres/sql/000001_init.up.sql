@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     user_id UUID NOT NULL,
     command TEXT NOT NULL,
     args TEXT[],
+    image VARCHAR(100) NOT NULL,
+    environment TEXT NOT NULL,
     status TEXT NOT NULL,
     result TEXT,
     error_msg TEXT,

@@ -17,6 +17,7 @@ import (
 	"github.com/hamidoujand/task-scheduler/business/database/postgres"
 	"github.com/hamidoujand/task-scheduler/foundation/keystore"
 	"github.com/hamidoujand/task-scheduler/foundation/logger"
+	"github.com/redis/go-redis/v9"
 )
 
 // will be changed from build tags
@@ -58,6 +59,13 @@ func run() error {
 			ActiveKid  string        `conf:"default:a41bace0-da3c-4119-85ad-bbd293bf31ee"`
 			Issuer     string        `conf:"default:task scheduler"`
 			TokenAge   time.Duration `conf:"default:1y"`
+		}
+
+		Redis struct {
+			Host     string        `conf:"default:localhost:6379"`
+			Password string        `conf:"default:"`
+			DBIdx    int           `conf:"default:0"`
+			Timeout  time.Duration `conf:"default:5s"`
 		}
 	}{}
 
@@ -131,6 +139,24 @@ func run() error {
 		return fmt.Errorf("loadFromFS: %w", err)
 	}
 
+	//==========================================================================
+	//redis
+	logger.Info("redis", "status", "initializing keystore support")
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     configs.Redis.Host,
+		Password: configs.Redis.Password,
+		DB:       configs.Redis.DBIdx,
+	})
+
+	logger.Info("redis", "status", "pinging redis engine")
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second*configs.Redis.Timeout)
+	defer cancel()
+
+	err = redisClient.Ping(ctx).Err()
+	if err != nil {
+		return fmt.Errorf("redis ping: %w", err)
+	}
+	logger.Info("redis", "status", "successfully connected")
 	//==========================================================================
 	//server
 

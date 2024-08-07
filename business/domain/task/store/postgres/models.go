@@ -14,6 +14,8 @@ type Task struct {
 	UserId       uuid.UUID
 	Command      string
 	Args         sql.Null[[]string]
+	Image        string
+	Environment  string
 	Status       string
 	Result       sql.Null[string]
 	ErrorMessage sql.Null[string]
@@ -31,6 +33,8 @@ func toDBTask(t task.Task) Task {
 			V:     t.Args,
 			Valid: t.Args != nil,
 		},
+		Image:        t.Image,
+		Environment:  t.Environment,
 		Status:       t.Status.String(),
 		Result:       sql.Null[string]{V: t.Result, Valid: t.Result != ""},
 		ErrorMessage: sql.Null[string]{V: t.ErrMessage, Valid: t.ErrMessage != ""},
@@ -64,6 +68,8 @@ func (t Task) toDomainTask() task.Task {
 		UserId:      t.UserId,
 		Command:     t.Command,
 		Args:        args,
+		Image:       t.Image,
+		Environment: t.Environment,
 		Status:      status,
 		Result:      result,
 		ErrMessage:  errMsgs,

@@ -41,6 +41,8 @@ func (s *Service) CreateTask(ctx context.Context, nt NewTask) (Task, error) {
 		UserId:      nt.UserId,
 		Command:     nt.Command,
 		Args:        nt.Args,
+		Image:       nt.Image,
+		Environment: nt.Environment,
 		Status:      StatusPending,
 		ScheduledAt: nt.ScheduledAt,
 		CreatedAt:   now,

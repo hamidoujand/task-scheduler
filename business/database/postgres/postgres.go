@@ -15,7 +15,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// TODO: before docker, run "postgres" locally and test this package manually
 var (
 	//go:embed sql/*.sql
 	migrationFiles embed.FS

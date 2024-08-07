@@ -18,18 +18,35 @@ func TestCreateTask(t *testing.T) {
 
 	service := task.NewService(&store)
 
-	//create task
-	tsk, err := service.CreateTask(context.Background(), task.NewTask{
+	nt := task.NewTask{
 		Command:     "ls",
 		Args:        []string{"-l", "-a"},
 		ScheduledAt: time.Now().Add(time.Hour * 2),
-	})
+		Image:       "alpine",
+		UserId:      uuid.New(),
+		Environment: "APP_NAME=test",
+	}
+
+	//create task
+	tsk, err := service.CreateTask(context.Background(), nt)
 	if err != nil {
 		t.Fatalf("expected the task to be saved: %s", err)
 	}
 
 	if tsk.Status != task.StatusPending {
 		t.Errorf("expected status to be %q, but got %q", task.StatusPending, tsk.Status)
+	}
+
+	if tsk.Image != nt.Image {
+		t.Errorf("image= %s, got %s", nt.Image, tsk.Image)
+	}
+
+	if tsk.Command != nt.Command {
+		t.Errorf("command= %s, got %s", nt.Command, tsk.Command)
+	}
+
+	if tsk.Environment != nt.Environment {
+		t.Errorf("environment= %s, got %s", nt.Environment, tsk.Environment)
 	}
 
 	if tsk.CreatedAt.IsZero() || tsk.UpdatedAt.IsZero() {
@@ -45,6 +62,9 @@ func TestGetTaskById(t *testing.T) {
 		Command:     "docker",
 		Args:        []string{"ps"},
 		Status:      task.StatusCompleted,
+		UserId:      uuid.New(),
+		Image:       "alpine",
+		Environment: "APP_NAME=test",
 		Result:      "data",
 		ErrMessage:  "",
 		ScheduledAt: now.Add(time.Hour * 2),
@@ -74,6 +94,14 @@ func TestGetTaskById(t *testing.T) {
 
 	if tsk.Args[0] != dt.Args[0] {
 		t.Errorf("expected the first arg to be %q, but got %q", "ps", tsk.Args[0])
+	}
+
+	if tsk.Image != dt.Image {
+		t.Errorf("image= %s, got %s", dt.Image, tsk.Image)
+	}
+
+	if tsk.Environment != dt.Environment {
+		t.Errorf("environment= %s, got %s", dt.Environment, tsk.Environment)
 	}
 
 	newId := uuid.New()
