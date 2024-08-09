@@ -3,6 +3,8 @@ package redis_test
 import (
 	"context"
 	"errors"
+	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 )
 
 func TestCreate(t *testing.T) {
+	t.Parallel()
 	client := setup(t, "test_create")
 	repo := redisRepo.NewRepository(client)
 
@@ -29,6 +32,7 @@ func TestCreate(t *testing.T) {
 }
 
 func TestGetByID(t *testing.T) {
+	t.Parallel()
 	client := setup(t, "test_get_by_id")
 	repo := redisRepo.NewRepository(client)
 
@@ -72,6 +76,7 @@ func TestGetByID(t *testing.T) {
 }
 
 func TestDeleteById(t *testing.T) {
+	t.Parallel()
 	client := setup(t, "test_delete_by_id")
 	repo := redisRepo.NewRepository(client)
 
@@ -107,6 +112,7 @@ func TestDeleteById(t *testing.T) {
 }
 
 func TestUpdate(t *testing.T) {
+	t.Parallel()
 	client := setup(t, "test_update")
 	repo := redisRepo.NewRepository(client)
 
@@ -145,6 +151,56 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+func TestGetAll(t *testing.T) {
+	t.Parallel()
+	client := setup(t, "test_get_all")
+	repo := redisRepo.NewRepository(client)
+	workers := []worker.Worker{
+		{
+			ID:     uuid.New(),
+			Status: worker.WorkerBusy,
+			Load:   20,
+		},
+		{
+			ID:     uuid.New(),
+			Status: worker.WorkerIdle,
+			Load:   0,
+		},
+		{
+			ID:     uuid.New(),
+			Status: worker.WorkerBusy,
+			Load:   10,
+		},
+	}
+
+	for _, w := range workers {
+		if err := repo.Create(context.Background(), w); err != nil {
+			t.Fatalf("expected to create worker: %s", err)
+		}
+	}
+
+	//get all
+
+	fetched, err := repo.GetAll(context.Background())
+	if err != nil {
+		t.Fatalf("expected to fetch all workers: %s", err)
+	}
+
+	if len(fetched) != len(workers) {
+		t.Errorf("length= %d, got %d", len(workers), len(fetched))
+	}
+
+	for _, fw := range fetched {
+		found := slices.ContainsFunc(workers, func(w worker.Worker) bool {
+			return reflect.DeepEqual(fw, w)
+		})
+		if !found {
+			t.Errorf("expected to find %v inside workers", fw)
+		}
+	}
+}
+
+// ==============================================================================
 func setup(t *testing.T, name string) *redis.Client {
 	// setup
 	image := "redis:latest"
@@ -165,7 +221,7 @@ func setup(t *testing.T, name string) *redis.Client {
 	})
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		t.Errorf("expected to ping redis engine: %s", err)
+		t.Fatalf("expected to ping redis engine: %s", err)
 	}
 	//teardown
 	t.Cleanup(func() {

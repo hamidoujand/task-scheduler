@@ -97,3 +97,37 @@ func (r *Repository) Update(ctx context.Context, w worker.Worker) error {
 
 	return nil
 }
+
+// GetAll returns a list of all workers or possible error.
+func (r *Repository) GetAll(ctx context.Context) ([]worker.Worker, error) {
+	var redisWorkers []redisWorker
+	var cursor uint64
+
+	key := entity + ":*"
+
+	for {
+		keys, nextCursor, err := r.redisClient.Scan(ctx, cursor, key, 10).Result()
+		if err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+
+		cursor = nextCursor
+		for _, key := range keys {
+			var w redisWorker
+			if err := r.redisClient.HGetAll(ctx, key).Scan(&w); err != nil {
+				return nil, fmt.Errorf("hgetall: %w", err)
+			}
+			redisWorkers = append(redisWorkers, w)
+		}
+
+		if cursor == 0 {
+			break
+		}
+	}
+
+	results := make([]worker.Worker, len(redisWorkers))
+	for i, rw := range redisWorkers {
+		results[i] = rw.toServiceWorker()
+	}
+	return results, nil
+}
