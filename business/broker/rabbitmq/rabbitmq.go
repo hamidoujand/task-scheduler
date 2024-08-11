@@ -11,7 +11,7 @@ import (
 
 // RabbitMQClient represents a set of APIs we need to access when working againt
 // rabbitmq client.
-type RabbitMQClient struct {
+type Client struct {
 	conn    *amqp.Connection
 	channel *amqp.Channel
 }
@@ -24,7 +24,7 @@ type Configs struct {
 }
 
 // NewClient creates a connection rabbitmq server and creates a client return it or possible error.
-func NewClient(ctx context.Context, conf Configs) (*RabbitMQClient, error) {
+func NewClient(ctx context.Context, conf Configs) (*Client, error) {
 
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
@@ -66,14 +66,14 @@ func NewClient(ctx context.Context, conf Configs) (*RabbitMQClient, error) {
 		return nil, fmt.Errorf("open channel: %w", err)
 	}
 
-	return &RabbitMQClient{
+	return &Client{
 		conn:    conn,
 		channel: ch,
 	}, nil
 }
 
 // Close will close the connection and the channel or returns possible errors
-func (rc *RabbitMQClient) Close() error {
+func (rc *Client) Close() error {
 	err := rc.channel.Close()
 	if err != nil {
 		return fmt.Errorf("channel: %w", err)
@@ -87,7 +87,7 @@ func (rc *RabbitMQClient) Close() error {
 }
 
 // DeclareQueue is going to create a queue to push messages into it.
-func (rc *RabbitMQClient) DeclareQueue(name string) error {
+func (rc *Client) DeclareQueue(name string) error {
 	_, err := rc.channel.QueueDeclare(
 		name,
 		true,
@@ -103,7 +103,7 @@ func (rc *RabbitMQClient) DeclareQueue(name string) error {
 }
 
 // Publish enqueues the message into the queue or returns possible errors.
-func (rc *RabbitMQClient) Publish(queue string, msg []byte) error {
+func (rc *Client) Publish(queue string, msg []byte) error {
 	if err := rc.channel.Publish(
 		"",
 		queue,
@@ -121,7 +121,7 @@ func (rc *RabbitMQClient) Publish(queue string, msg []byte) error {
 }
 
 // Consumer returns <-chan amqp.Delivery to consume messages from or possible error.
-func (rc *RabbitMQClient) Consumer(queue string) (<-chan amqp.Delivery, error) {
+func (rc *Client) Consumer(queue string) (<-chan amqp.Delivery, error) {
 	//limit the number of messages that the broker will deliver to consumers
 	//before requiring an acknowledgment
 	if err := rc.channel.Qos(1, 0, false); err != nil {
