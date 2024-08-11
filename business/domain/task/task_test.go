@@ -62,7 +62,7 @@ func TestCreateTask(t *testing.T) {
 	}
 
 	//check the message inside rabbitmq
-	queue := "tasks"
+	queue := "queue_tasks"
 	msgs, err := rClient.Consumer(queue)
 	if err != nil {
 		t.Fatalf("expected to get back a rabbitmq delivery: %s", err)

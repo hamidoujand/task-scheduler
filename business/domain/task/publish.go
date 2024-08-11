@@ -6,7 +6,7 @@ import (
 	"github.com/hamidoujand/task-scheduler/business/broker/rabbitmq"
 )
 
-const queue = "tasks"
+const queue = "queue_tasks"
 
 func publish(client *rabbitmq.Client, bs []byte) error {
 	if err := client.Publish(queue, bs); err != nil {
