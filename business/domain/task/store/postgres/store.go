@@ -225,3 +225,55 @@ func parseArgs(raw any) (sql.Null[[]string], error) {
 
 	return args, nil
 }
+
+// GetDueTasks fetches all of the tasks that have less than or equal to 1 min to
+// their scheduledAt.
+func (r *Repository) GetDueTasks(ctx context.Context) ([]task.Task, error) {
+	const q = `
+	SELECT 
+		id,user_id,command,array_to_json(args) as args,image,environment,status,result,error_msg,scheduled_at,created_at,updated_at
+	FROM 
+		tasks
+	WHERE 
+		scheduled_at <= NOW() + INTERVAL '1 minute' AND status = 'pending'
+	`
+
+	rows, err := r.client.DB.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("querycontext: %w", err)
+	}
+
+	var results []task.Task
+	for rows.Next() {
+		var dbTask Task
+		var commandArgs any
+		err := rows.Scan(
+			&dbTask.Id,
+			&dbTask.UserId,
+			&dbTask.Command,
+			&commandArgs,
+			&dbTask.Image,
+			&dbTask.Environment,
+			&dbTask.Status,
+			&dbTask.Result,
+			&dbTask.ErrorMessage,
+			&dbTask.ScheduledAt,
+			&dbTask.CreatedAt,
+			&dbTask.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+
+		args, err := parseArgs(commandArgs)
+
+		if err != nil {
+			return nil, fmt.Errorf("parseArgs: %w", err)
+		}
+
+		dbTask.Args = args
+		results = append(results, dbTask.toDomainTask())
+	}
+
+	return results, nil
+}

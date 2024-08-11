@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hamidoujand/task-scheduler/business/domain/task"
@@ -62,5 +63,19 @@ func (r *Repository) GetByUserId(ctx context.Context, userId uuid.UUID, rows int
 		}
 	}
 
+	return results, nil
+}
+
+// GetDueTasks returns all tasks that has 1 min to execute.
+func (r *Repository) GetDueTasks(ctx context.Context) ([]task.Task, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var results []task.Task
+	for _, tsk := range r.Tasks {
+		diff := time.Until(tsk.ScheduledAt)
+		if diff <= time.Minute {
+			results = append(results, tsk)
+		}
+	}
 	return results, nil
 }
