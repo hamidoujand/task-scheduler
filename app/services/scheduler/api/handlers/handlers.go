@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/handlers/tasks"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/handlers/users"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/mid"
+	"github.com/hamidoujand/task-scheduler/business/broker/rabbitmq"
 	"github.com/hamidoujand/task-scheduler/business/database/postgres"
 	"github.com/hamidoujand/task-scheduler/business/domain/task"
 	taskPostgresRepo "github.com/hamidoujand/task-scheduler/business/domain/task/store/postgres"
@@ -27,9 +29,10 @@ type Config struct {
 	ActiveKID      string
 	TokenAge       time.Duration
 	Keystore       auth.Keystore
+	RClient        *rabbitmq.Client
 }
 
-func RegisterRoutes(conf Config) *web.App {
+func RegisterRoutes(conf Config) (*web.App, error) {
 	//==============================================================================
 	//setup
 	const version = "v1"
@@ -40,7 +43,10 @@ func RegisterRoutes(conf Config) *web.App {
 	)
 
 	taskRepo := taskPostgresRepo.NewRepository(conf.PostgresClient)
-	taskService := task.NewService(taskRepo)
+	taskService, err := task.NewService(taskRepo, conf.RClient)
+	if err != nil {
+		return nil, fmt.Errorf("new service: %w", err)
+	}
 
 	userRepo := userPostgresRepo.NewRepository(conf.PostgresClient)
 	userService := user.NewService(userRepo)
@@ -86,5 +92,5 @@ func RegisterRoutes(conf Config) *web.App {
 
 	app.HandleFunc(http.MethodPost, version, "/api/users/login", userHandler.Login)
 
-	return app
+	return app, nil
 }

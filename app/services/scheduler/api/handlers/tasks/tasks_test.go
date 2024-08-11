@@ -17,18 +17,24 @@ import (
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/auth"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
 	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/handlers/tasks"
+	"github.com/hamidoujand/task-scheduler/business/brokertest"
 	"github.com/hamidoujand/task-scheduler/business/domain/task"
 	"github.com/hamidoujand/task-scheduler/business/domain/task/store/memory"
 	"github.com/hamidoujand/task-scheduler/business/domain/user"
 )
 
 func TestCreateTask(t *testing.T) {
-
+	t.Parallel()
 	memRepo := memory.Repository{
 		Tasks: make(map[uuid.UUID]task.Task),
 	}
-	taskService := task.NewService(&memRepo)
 
+	rClient := brokertest.NewTestClient(t, context.Background(), "test_create_task_app")
+
+	taskService, err := task.NewService(&memRepo, rClient)
+	if err != nil {
+		t.Fatalf("expected to create a new server: %s", err)
+	}
 	v, err := errs.NewAppValidator()
 	if err != nil {
 		t.Fatalf("should be able to create a validator: %s", err)
@@ -185,6 +191,7 @@ func TestCreateTask(t *testing.T) {
 }
 
 func TestGetTaskById(t *testing.T) {
+	t.Parallel()
 
 	taskCreator := user.User{
 		Id:   uuid.New(),
@@ -233,7 +240,13 @@ func TestGetTaskById(t *testing.T) {
 			taskId: tsk,
 		},
 	}
-	taskService := task.NewService(&memRepo)
+
+	rClient := brokertest.NewTestClient(t, context.Background(), "test_create_get_task_by_id_app")
+
+	taskService, err := task.NewService(&memRepo, rClient)
+	if err != nil {
+		t.Fatalf("expected to create to create new service: %s", err)
+	}
 
 	v, err := errs.NewAppValidator()
 	if err != nil {
@@ -339,6 +352,8 @@ func TestGetTaskById(t *testing.T) {
 }
 
 func TestDeleteTaskById(t *testing.T) {
+	t.Parallel()
+
 	taskCreator := user.User{
 		Id:   uuid.New(),
 		Name: "John Doe",
@@ -427,7 +442,12 @@ func TestDeleteTaskById(t *testing.T) {
 			task3Id: tsk3,
 		},
 	}
-	taskService := task.NewService(&memRepo)
+
+	rClient := brokertest.NewTestClient(t, context.Background(), "test_delete_task_by_id_app")
+	taskService, err := task.NewService(&memRepo, rClient)
+	if err != nil {
+		t.Fatalf("expected to create new service: %s", err)
+	}
 
 	v, err := errs.NewAppValidator()
 	if err != nil {
@@ -513,6 +533,8 @@ func TestDeleteTaskById(t *testing.T) {
 // pagination and order by have solid tests against real database so we do not need to test against
 // memory repository just the parsing part of "order by" and "pagination"
 func TestGetAllTasks(t *testing.T) {
+	t.Parallel()
+
 	taskCreator := user.User{
 		Id:   uuid.New(),
 		Name: "John Doe",
@@ -575,7 +597,11 @@ func TestGetAllTasks(t *testing.T) {
 			task3Id: tsk3,
 		},
 	}
-	taskService := task.NewService(&memRepo)
+	rClient := brokertest.NewTestClient(t, context.Background(), "test_get_all_tasks_app")
+	taskService, err := task.NewService(&memRepo, rClient)
+	if err != nil {
+		t.Fatalf("expected to create new service: %s", err)
+	}
 
 	v, err := errs.NewAppValidator()
 	if err != nil {

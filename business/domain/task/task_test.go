@@ -2,26 +2,34 @@ package task_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hamidoujand/task-scheduler/business/brokertest"
 	"github.com/hamidoujand/task-scheduler/business/domain/task"
 	"github.com/hamidoujand/task-scheduler/business/domain/task/store/memory"
 )
 
 func TestCreateTask(t *testing.T) {
+	t.Parallel()
 	store := memory.Repository{
 		Tasks: make(map[uuid.UUID]task.Task),
 	}
 
-	service := task.NewService(&store)
+	rClient := brokertest.NewTestClient(t, context.Background(), "test_create_task")
+
+	service, err := task.NewService(&store, rClient)
+	if err != nil {
+		t.Fatalf("expected to create service: %s", err)
+	}
 
 	nt := task.NewTask{
 		Command:     "ls",
 		Args:        []string{"-l", "-a"},
-		ScheduledAt: time.Now().Add(time.Hour * 2),
+		ScheduledAt: time.Now().Add(time.Minute),
 		Image:       "alpine",
 		UserId:      uuid.New(),
 		Environment: "APP_NAME=test",
@@ -52,9 +60,38 @@ func TestCreateTask(t *testing.T) {
 	if tsk.CreatedAt.IsZero() || tsk.UpdatedAt.IsZero() {
 		t.Errorf("expected createdAt and updatedAt field to not be zero time values")
 	}
+
+	//check the message inside rabbitmq
+	queue := "tasks"
+	msgs, err := rClient.Consumer(queue)
+	if err != nil {
+		t.Fatalf("expected to get back a rabbitmq delivery: %s", err)
+	}
+
+	//consume
+	d := <-msgs
+
+	if d.ContentType != "application/json" {
+		t.Fatalf("content-type= %s, got %s", "application/json", d.ContentType)
+	}
+
+	var queueTask task.Task
+	if err := json.Unmarshal(d.Body, &queueTask); err != nil {
+		t.Fatalf("expected to unmarshal task: %s", err)
+	}
+
+	if queueTask.Command != tsk.Command {
+		t.Errorf("command= %s, got %s", tsk.Command, queueTask.Command)
+	}
+	//should be able to ack the message
+	if err := d.Ack(false); err != nil {
+		t.Fatalf("expected to ack the message: %s", err)
+	}
 }
 
 func TestGetTaskById(t *testing.T) {
+	t.Parallel()
+
 	id := uuid.New()
 	now := time.Now()
 	dt := task.Task{
@@ -77,7 +114,12 @@ func TestGetTaskById(t *testing.T) {
 		},
 	}
 
-	service := task.NewService(&store)
+	rClient := brokertest.NewTestClient(t, context.Background(), "test_get_task_by_id")
+
+	service, err := task.NewService(&store, rClient)
+	if err != nil {
+		t.Fatalf("expected to create service: %s", err)
+	}
 
 	tsk, err := service.GetTaskById(context.Background(), id)
 	if err != nil {
@@ -116,6 +158,8 @@ func TestGetTaskById(t *testing.T) {
 }
 
 func TestDeleteTask(t *testing.T) {
+	t.Parallel()
+
 	id := uuid.New()
 	now := time.Now()
 	store := memory.Repository{
@@ -134,7 +178,12 @@ func TestDeleteTask(t *testing.T) {
 		},
 	}
 
-	service := task.NewService(&store)
+	rClient := brokertest.NewTestClient(t, context.Background(), "test_delete_task")
+
+	service, err := task.NewService(&store, rClient)
+	if err != nil {
+		t.Fatalf("expected to create service: %s", err)
+	}
 
 	tsk, err := service.GetTaskById(context.Background(), id)
 	if err != nil {
@@ -156,6 +205,8 @@ func TestDeleteTask(t *testing.T) {
 }
 
 func TestUpdateTask(t *testing.T) {
+	t.Parallel()
+
 	id := uuid.New()
 	now := time.Now()
 	store := memory.Repository{
@@ -171,7 +222,13 @@ func TestUpdateTask(t *testing.T) {
 			},
 		},
 	}
-	service := task.NewService(&store)
+
+	rClient := brokertest.NewTestClient(t, context.Background(), "test_update_task")
+
+	service, err := task.NewService(&store, rClient)
+	if err != nil {
+		t.Fatalf("expected to create service: %s", err)
+	}
 
 	tsk, err := service.GetTaskById(context.Background(), id)
 	if err != nil {
@@ -200,6 +257,8 @@ func TestUpdateTask(t *testing.T) {
 }
 
 func TestGetTasksByUserId(t *testing.T) {
+	t.Parallel()
+
 	userId := uuid.New()
 
 	id1 := uuid.New()
@@ -228,7 +287,13 @@ func TestGetTasksByUserId(t *testing.T) {
 			},
 		},
 	}
-	service := task.NewService(&store)
+
+	rClient := brokertest.NewTestClient(t, context.Background(), "test_tasks_by_user_id")
+
+	service, err := task.NewService(&store, rClient)
+	if err != nil {
+		t.Fatalf("expected to create service: %s", err)
+	}
 
 	page := 1
 	rows := 3
@@ -254,6 +319,8 @@ func TestGetTasksByUserId(t *testing.T) {
 }
 
 func TestParseField(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		input         string
 		expectError   bool
@@ -294,6 +361,8 @@ func TestParseField(t *testing.T) {
 }
 
 func TestParseDirection(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		input         string
 		expectError   bool

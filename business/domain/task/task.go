@@ -3,11 +3,13 @@ package task
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hamidoujand/task-scheduler/business/broker/rabbitmq"
 )
 
 var (
@@ -25,12 +27,21 @@ type store interface {
 
 // Service represents set of APIs for accessing tasks.
 type Service struct {
-	store store
+	store   store
+	rClient *rabbitmq.Client
 }
 
 // NewService creates *Service and returns it.
-func NewService(store store) *Service {
-	return &Service{store}
+func NewService(store store, rClient *rabbitmq.Client) (*Service, error) {
+	//register queue
+	if err := rClient.DeclareQueue(queue); err != nil {
+		return nil, fmt.Errorf("declare queue: %w", err)
+	}
+
+	return &Service{
+		store:   store,
+		rClient: rClient,
+	}, nil
 }
 
 func (s *Service) CreateTask(ctx context.Context, nt NewTask) (Task, error) {
@@ -53,6 +64,20 @@ func (s *Service) CreateTask(ctx context.Context, nt NewTask) (Task, error) {
 	if err != nil {
 		return Task{}, fmt.Errorf("task creation: %w", err)
 	}
+
+	//now check deadline, less than 1 min will be enqueued into rabbitmq
+	difference := task.ScheduledAt.Sub(now)
+	if difference < time.Minute {
+		bs, err := json.Marshal(task)
+		if err != nil {
+			return Task{}, fmt.Errorf("marshal: %w", err)
+		}
+
+		if err := publish(s.rClient, bs); err != nil {
+			return Task{}, fmt.Errorf("publish: %w", err)
+		}
+	}
+
 	return task, nil
 }
 

@@ -165,7 +165,7 @@ func run() error {
 
 	signal.Notify(shutdownCh, syscall.SIGTERM, syscall.SIGINT)
 
-	app := handlers.RegisterRoutes(handlers.Config{
+	app, err := handlers.RegisterRoutes(handlers.Config{
 		Shutdown:       shutdownCh,
 		Logger:         logger,
 		Validator:      appValidator,
@@ -174,6 +174,9 @@ func run() error {
 		TokenAge:       configs.Auth.TokenAge,
 		Keystore:       ks,
 	})
+	if err != nil {
+		return fmt.Errorf("register routes: %w", err)
+	}
 
 	srv := http.Server{
 		Addr:        configs.API.Host,
