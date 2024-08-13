@@ -167,3 +167,22 @@ func exists(id string, port string) (Container, error) {
 	}
 	return c, nil
 }
+
+// RunCommand is going to create a container and execute one-time commands inside of it
+// for services use "StartContainer".
+func RunCommand(image string, command string, dockerArgs []string, cmdArgs []string) (string, error) {
+	args := []string{"run", "--rm"}
+	args = append(args, dockerArgs...)
+	args = append(args, image)
+	args = append(args, command)
+	args = append(args, cmdArgs...)
+
+	cmd := exec.Command("docker", args...)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("can't run %v in image %q:%w", args, image, err)
+	}
+
+	return string(output), nil
+}
