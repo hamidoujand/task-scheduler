@@ -4,16 +4,16 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	redisRepo "github.com/hamidoujand/task-scheduler/business/domain/scheduler/store/redis"
-	"github.com/hamidoujand/task-scheduler/foundation/docker"
+	"github.com/hamidoujand/task-scheduler/business/redistest"
 	"github.com/redis/go-redis/v9"
 )
 
 func TestCreate(t *testing.T) {
-	client := setup(t, "test_create")
+	t.Parallel()
+	client := redistest.NewRedisClient(t, context.Background(), "test_redis_create")
 	repo := redisRepo.NewRepository(client)
 
 	taskId := uuid.NewString()
@@ -24,7 +24,8 @@ func TestCreate(t *testing.T) {
 }
 
 func TestGet(t *testing.T) {
-	client := setup(t, "test_get")
+	t.Parallel()
+	client := redistest.NewRedisClient(t, context.Background(), "test_redis_get")
 	repo := redisRepo.NewRepository(client)
 
 	taskId := uuid.NewString()
@@ -55,7 +56,8 @@ func TestGet(t *testing.T) {
 }
 
 func TestUpdate(t *testing.T) {
-	client := setup(t, "test_update")
+	t.Parallel()
+	client := redistest.NewRedisClient(t, context.Background(), "test_redis_update")
 	repo := redisRepo.NewRepository(client)
 
 	taskId := uuid.NewString()
@@ -80,7 +82,8 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	client := setup(t, "test_delete")
+	t.Parallel()
+	client := redistest.NewRedisClient(t, context.Background(), "test_redis_delete")
 	repo := redisRepo.NewRepository(client)
 
 	taskId := uuid.NewString()
@@ -101,40 +104,4 @@ func TestDelete(t *testing.T) {
 	if !errors.Is(err, redis.Nil) {
 		t.Fatalf("error = %v, got %v", redis.Nil, err)
 	}
-}
-
-func setup(t *testing.T, name string) *redis.Client {
-	// setup
-	image := "redis:latest"
-	internalPort := "6379"
-	c, err := docker.StartContainer(image, name, internalPort, nil, nil)
-	if err != nil {
-		t.Fatalf("expected to create a redis container: %s", err)
-	}
-
-	//slow machine
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
-	defer cancel()
-
-	client := redis.NewClient(&redis.Options{
-		Addr:     c.HostPort,
-		Password: "",
-		DB:       0,
-	})
-
-	if err := client.Ping(ctx).Err(); err != nil {
-		t.Fatalf("expected to ping redis engine: %s", err)
-	}
-	//teardown
-	t.Cleanup(func() {
-		if err := client.Close(); err != nil {
-			t.Errorf("failed to close redis client: %s", err)
-		}
-
-		if err := c.Stop(); err != nil {
-			t.Errorf("failed to stop container %s: %s", c.Id, err)
-		}
-	})
-
-	return client
 }
