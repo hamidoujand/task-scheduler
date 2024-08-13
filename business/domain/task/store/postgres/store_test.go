@@ -322,24 +322,56 @@ func TestGetDueTasks(t *testing.T) {
 	store := postgresRepo.NewRepository(client)
 
 	//seed it
-	expectedLength := seedDueTasks(t, store)
+	task1 := task.Task{
+		Id:          uuid.New(),
+		UserId:      uuid.New(),
+		Command:     "run1",
+		Args:        []string{"arg1", "arg2"},
+		Image:       "image1",
+		Environment: "env1",
+		Status:      task.StatusPending,
+		ScheduledAt: time.Now().Add(time.Second * 30),
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	task2 := task.Task{
+		Id:          uuid.New(),
+		UserId:      uuid.New(),
+		Command:     "run1",
+		Args:        []string{"arg1", "arg2"},
+		Image:       "image2",
+		Environment: "env2",
+		Status:      task.StatusPending,
+		ScheduledAt: time.Now().Add(time.Second * 90),
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
 
-	//only 3/5 are less than or equal to 1 min
-	tasks, err := store.GetDueTasks(context.Background())
+	seedTasks := []task.Task{task1, task2}
+	for i, tsk := range seedTasks {
+		if err := store.Create(context.Background(), tsk); err != nil {
+			t.Fatalf("expected to create task%d: %s", i, err)
+		}
+	}
+
+	oneMinLater := time.Now().Add(time.Minute)
+	tasks, err := store.GetDueTasks(context.Background(), oneMinLater)
 	if err != nil {
 		t.Fatalf("expected to fetch all due tasks: %s", err)
 	}
 
-	//only tasks with data "data0" "data2" and "data4" should be in results
-	if len(tasks) != expectedLength {
-		t.Fatalf("length= %d, got %d", expectedLength, len(tasks))
+	//only should fetch 1 of them.
+	if len(tasks) != 1 {
+		t.Fatalf("length= %d, got %d", 1, len(tasks))
 	}
 
-	results := []string{"data0", "data2", "data4"}
-	for _, tsk := range tasks {
-		if !slices.Contains(results, tsk.Result) {
-			t.Errorf("expected %s result to be part of the data we got back", tsk.Result)
-		}
+	tsk := tasks[0]
+	if tsk.Id != task1.Id {
+		t.Errorf("id= %s, got %s", task1.Id, tsk.Id)
+	}
+
+	if tsk.Command != task1.Command {
+		t.Errorf("command= %s, got %s", task1.Command, tsk.Command)
 	}
 }
 
@@ -383,33 +415,4 @@ func seedTasks(t *testing.T, repo *postgresRepo.Repository) (uuid.UUID, []string
 		}
 	}
 	return userId, commands
-}
-
-func seedDueTasks(t *testing.T, repo *postgresRepo.Repository) int {
-	now := time.Now()
-	expectedCount := 0
-	for i := range 5 {
-		task := task.Task{
-			Id:        uuid.New(),
-			UserId:    uuid.New(),
-			Image:     "alpine:3.20",
-			Command:   "ls",
-			Args:      []string{"-l"},
-			Result:    fmt.Sprintf("data%d", i),
-			Status:    task.StatusPending,
-			CreatedAt: now,
-			UpdatedAt: now,
-		}
-		if i%2 == 0 {
-			task.ScheduledAt = now
-			expectedCount++
-		} else {
-			task.ScheduledAt = now.Add(time.Minute * 5)
-		}
-		err := repo.Create(context.Background(), task)
-		if err != nil {
-			t.Fatalf("expected to seed the db: %s", err)
-		}
-	}
-	return expectedCount
 }

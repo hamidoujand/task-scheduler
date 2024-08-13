@@ -3,7 +3,6 @@ package task
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -23,7 +22,7 @@ type store interface {
 	Delete(ctx context.Context, task Task) error
 	GetById(ctx context.Context, taskId uuid.UUID) (Task, error)
 	GetByUserId(ctx context.Context, userId uuid.UUID, rows int, page int, order OrderBy) ([]Task, error)
-	GetDueTasks(ctx context.Context) ([]Task, error)
+	GetDueTasks(ctx context.Context, from time.Time) ([]Task, error)
 }
 
 // Service represents set of APIs for accessing tasks.
@@ -69,12 +68,7 @@ func (s *Service) CreateTask(ctx context.Context, nt NewTask) (Task, error) {
 	//now check deadline, less than 1 min will be enqueued into rabbitmq
 	difference := task.ScheduledAt.Sub(now)
 	if difference <= time.Minute {
-		bs, err := json.Marshal(task)
-		if err != nil {
-			return Task{}, fmt.Errorf("marshal: %w", err)
-		}
-
-		if err := publish(s.rClient, bs); err != nil {
+		if err := publishTask(s.rClient, task); err != nil {
 			return Task{}, fmt.Errorf("publish: %w", err)
 		}
 	}
@@ -137,7 +131,8 @@ func (s *Service) GetTasksByUserId(ctx context.Context, userId uuid.UUID, rowsPe
 // GetAllDueTasks fetches all of the tasks from repo that have less than 1 min to their
 // scheduled time.
 func (s *Service) GetAllDueTasks(ctx context.Context) ([]Task, error) {
-	tsks, err := s.store.GetDueTasks(ctx)
+	now := time.Now()
+	tsks, err := s.store.GetDueTasks(ctx, now)
 	if err != nil {
 		return nil, fmt.Errorf("get due tasks: %w", err)
 	}

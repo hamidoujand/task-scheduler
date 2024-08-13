@@ -67,12 +67,12 @@ func (r *Repository) GetByUserId(ctx context.Context, userId uuid.UUID, rows int
 }
 
 // GetDueTasks returns all tasks that has 1 min to execute.
-func (r *Repository) GetDueTasks(ctx context.Context) ([]task.Task, error) {
+func (r *Repository) GetDueTasks(ctx context.Context, from time.Time) ([]task.Task, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var results []task.Task
 	for _, tsk := range r.Tasks {
-		diff := time.Until(tsk.ScheduledAt)
+		diff := tsk.ScheduledAt.Sub(from)
 		if diff <= time.Minute {
 			results = append(results, tsk)
 		}

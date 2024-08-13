@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hamidoujand/task-scheduler/business/database/postgres"
@@ -228,17 +229,19 @@ func parseArgs(raw any) (sql.Null[[]string], error) {
 
 // GetDueTasks fetches all of the tasks that have less than or equal to 1 min to
 // their scheduledAt.
-func (r *Repository) GetDueTasks(ctx context.Context) ([]task.Task, error) {
+func (r *Repository) GetDueTasks(ctx context.Context, from time.Time) ([]task.Task, error) {
 	const q = `
 	SELECT 
 		id,user_id,command,array_to_json(args) as args,image,environment,status,result,error_msg,scheduled_at,created_at,updated_at
 	FROM 
 		tasks
 	WHERE 
-		scheduled_at <= NOW() + INTERVAL '1 minute' AND status = 'pending'
+		scheduled_at <= $1 AND status = 'pending'
 	`
 
-	rows, err := r.client.DB.QueryContext(ctx, q)
+	from = from.Truncate(time.Second).UTC() //truncate by seconds and change int UTC
+	//since db is in UTC
+	rows, err := r.client.DB.QueryContext(ctx, q, from)
 	if err != nil {
 		return nil, fmt.Errorf("querycontext: %w", err)
 	}
