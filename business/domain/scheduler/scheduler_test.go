@@ -28,7 +28,7 @@ const maxRetries = 1
 
 func TestOnSuccess(t *testing.T) {
 	t.Parallel()
-	setups := setupTest(t, "test_consume_tasks")
+	setups := setupTest(t, "test_on_success_tasks")
 
 	scheduler, err := scheduler.New(scheduler.Config{
 		MaxRunningTask:      4,
@@ -138,7 +138,7 @@ func TestOnSuccess(t *testing.T) {
 
 func TestOnFailure(t *testing.T) {
 	t.Parallel()
-	setups := setupTest(t, "test_consume_tasks")
+	setups := setupTest(t, "test_on_failure_tasks")
 
 	scheduler, err := scheduler.New(scheduler.Config{
 		MaxRunningTask:      4,
@@ -307,6 +307,125 @@ func TestOnFailure(t *testing.T) {
 	if err := scheduler.Shutdown(context.Background()); err != nil {
 		t.Fatalf("expected to get a clean shutdown: %s", err)
 	}
+}
+
+func TestMonitorScheduledTasks(t *testing.T) {
+	t.Parallel()
+	setups := setupTest(t, "test_monitor_scheduled_tasks")
+
+	scheduler, err := scheduler.New(scheduler.Config{
+		MaxRunningTask:      4,
+		RabbitClient:        setups.rabbitC,
+		Logger:              setups.logger,
+		TaskService:         setups.taskService,
+		RedisRepo:           setups.redisR,
+		MaxRetries:          maxRetries,
+		MaxTimeForUpdateOps: time.Minute,
+	})
+
+	if err != nil {
+		t.Fatalf("expected to create a scheduler: %s", err)
+	}
+
+	//creates a goroutines inside of it that is waiting for tasks
+	if err := scheduler.ConsumeTasks(context.Background()); err != nil {
+		t.Fatalf("expected to consume tasks: %s", err)
+	}
+
+	//creates a goroutine inside of it that waiting for success tasks
+	if err := scheduler.OnTaskSuccess(); err != nil {
+		t.Fatalf("expected to run onTaskSuccess: %s", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := scheduler.MonitorScheduledTasks(ctx); err != nil {
+		t.Fatalf("expected to start monitor service: %s", err)
+	}
+
+	//insert few tasks with "+1:30" deadline
+	now := time.Now().Add(time.Second * 90)
+	nt1 := task.NewTask{
+		UserId:      uuid.New(),
+		Command:     "date",
+		Image:       "alpine:3.20",
+		Environment: "APP_NAME=test",
+		ScheduledAt: now,
+	}
+
+	nt2 := task.NewTask{
+		UserId:      uuid.New(),
+		Command:     "pwd",
+		Image:       "alpine:3.20",
+		Environment: "APP_NAME=test",
+		ScheduledAt: now,
+	}
+
+	nts := []task.NewTask{nt1, nt2}
+	ids := make([]uuid.UUID, 0, len(nts))
+	for _, nt := range nts {
+		//save it into db, since "scheduledAt" is "now" which is less than 1 min, the task service itself
+		//enqueue this into "queue_tasks"
+		tsk, err := setups.taskService.CreateTask(context.Background(), nt)
+		if err != nil {
+			t.Fatalf("expected to create the task: %s", err)
+		}
+		ids = append(ids, tsk.Id)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	errChan := make(chan error, 1)
+	go func() {
+		defer wg.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+		defer cancel()
+
+		//this will watch db the results
+		for attemp := 1; ; attemp++ {
+			fetched1, err := setups.taskService.GetTaskById(ctx, ids[0])
+			if err != nil {
+				errChan <- fmt.Errorf("get task by id %q: %w", ids[0], err)
+				return
+			}
+
+			fetched2, err := setups.taskService.GetTaskById(ctx, ids[1])
+			if err != nil {
+				errChan <- fmt.Errorf("get task by id %q: %w", ids[1], err)
+				return
+			}
+			if (fetched1.Status != task.StatusPending) && (fetched2.Status != task.StatusPending) {
+
+				t.Logf("\ncommand: %s\nResult: %s\n", fetched1.Command, fetched1.Result)
+				t.Logf("\ncommand: %s\nResult: %s\n", fetched2.Command, fetched2.Result)
+
+				if fetched1.ErrMessage != "" {
+					errChan <- fmt.Errorf("errorMessage1=%s , got %s", "<empty>", fetched1.ErrMessage)
+					return
+				}
+
+				if fetched2.ErrMessage != "" {
+					errChan <- fmt.Errorf("errorMessage2=%s , got %s", "<empty>", fetched2.ErrMessage)
+				}
+				errChan <- nil
+				return //success
+			}
+			time.Sleep(time.Second)
+		}
+	}()
+
+	wg.Wait()
+	//check errors
+	if err := <-errChan; err != nil {
+		t.Fatalf("expected the task to run successfully and get the results: %s", err)
+	}
+
+	if err := scheduler.Shutdown(context.Background()); err != nil {
+		t.Fatalf("expected a clean shutdown: %s", err)
+	}
+
 }
 
 type setup struct {

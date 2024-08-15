@@ -316,6 +316,45 @@ func (s *Scheduler) OnTaskRetry() error {
 	return nil
 }
 
+// MonitorScheduledTasks fetches all of the tasks that have less than or equal
+// to one minute to their scheduledAt deadline every one minute.
+// DO NOT PASS "deadline/timeout context", use a long-lived context such as "context.WithCancel()"
+func (s *Scheduler) MonitorScheduledTasks(ctx context.Context) error {
+	if _, ok := ctx.Deadline(); ok {
+		return errors.New("use a long-lived context such as context.WithCancel()")
+	}
+
+	//monitor
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			select {
+			case <-ctx.Done():
+				s.logger.Info("monitorScheduledTasks", "status", "received cancel signal", "msg", "cancelling")
+				return
+			default:
+				dueTasks, err := s.taskService.GetAllDueTasks(ctx)
+				if err != nil {
+					s.logger.Error("monitorScheduledTasks", "status", "failed to fetch due tasks", "msg", err)
+					return
+				}
+
+				for _, tsk := range dueTasks {
+					if err := s.publishTask(tsk, queueTasks); err != nil {
+						s.logger.Error("monitorScheduledTasks", "status", "failed to publish task into tasks queue", "msg", err)
+						continue
+					}
+				}
+			}
+		}
+
+	}()
+
+	return nil
+}
+
 func (s *Scheduler) handleRetryMessage(msg amqp091.Delivery) {
 	if err := msg.Ack(false); err != nil {
 		//handle error with logging them
