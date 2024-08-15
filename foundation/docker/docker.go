@@ -3,6 +3,7 @@ package docker
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -170,19 +171,25 @@ func exists(id string, port string) (Container, error) {
 
 // RunCommand is going to create a container and execute one-time commands inside of it
 // for services use "StartContainer".
-func RunCommand(image string, command string, dockerArgs []string, cmdArgs []string) (string, error) {
+func RunCommand(ctx context.Context, image string, command string, dockerArgs []string, cmdArgs []string) (string, error) {
 	args := []string{"run", "--rm"}
 	args = append(args, dockerArgs...)
 	args = append(args, image)
 	args = append(args, command)
 	args = append(args, cmdArgs...)
 
-	cmd := exec.Command("docker", args...)
+	cmd := exec.CommandContext(ctx, "docker", args...)
 
-	output, err := cmd.CombinedOutput()
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
 	if err != nil {
-		return "", fmt.Errorf("can't run %v in image %q:%w", args, image, err)
+		return "", fmt.Errorf("command execution failed:stderr:%s:%w", stderr.String(), err)
 	}
 
-	return string(output), nil
+	return stdout.String(), nil
 }
