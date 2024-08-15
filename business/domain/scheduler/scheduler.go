@@ -17,6 +17,7 @@ import (
 	"github.com/hamidoujand/task-scheduler/business/domain/task"
 	"github.com/hamidoujand/task-scheduler/foundation/docker"
 	"github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -269,9 +270,129 @@ func (s *Scheduler) OnTaskSuccess() error {
 	return nil
 }
 
-// OnTaskFailure handles the retries and eventually saving task into task service.
+// OnTaskFailure handles the failed tasks by updating them into task service.
 func (s *Scheduler) OnTaskFailure() error {
-	panic("")
+	msgs, err := s.rClient.Consumer(queueFailed)
+	if err != nil {
+		return fmt.Errorf("create on failure consumer: %w", err)
+	}
+
+	//consumer
+	go func() {
+		for msg := range msgs {
+			select {
+			case <-s.shutdown:
+				s.logger.Info("onTaskFailure", "status", "received shutdown signal", "msg", "shutting down")
+				return
+			default:
+				go s.handleFailedMessage(msg)
+			}
+		}
+	}()
+
+	return nil
+}
+
+// OnTaskRetry handles the retry of failed tasks or sending them for total failure.
+func (s *Scheduler) OnTaskRetry() error {
+	msgs, err := s.rClient.Consumer(queueRetry)
+	if err != nil {
+		return fmt.Errorf("creating on retry consumer: %w", err)
+	}
+
+	//consumer
+	go func() {
+		for msg := range msgs {
+			select {
+			case <-s.shutdown:
+				s.logger.Info("onTaskRetry", "status", "received shutdown signal", "msg", "shutting down")
+				return
+			default:
+				go s.handleRetryMessage(msg)
+			}
+		}
+	}()
+
+	return nil
+}
+
+func (s *Scheduler) handleRetryMessage(msg amqp091.Delivery) {
+	if err := msg.Ack(false); err != nil {
+		//handle error with logging them
+		s.logger.Error("handleRetryMessage", "status", "failed to ack()", "msg", err)
+		return
+	}
+
+	tsk, err := s.parseTask(msg.Body)
+	if err != nil {
+		s.logger.Error("handleRetryTask", "status", "failed to parse task from body", "msg", err)
+		return
+	}
+
+	//default ctx for redis
+	ctx, cancel := context.WithTimeout(context.Background(), s.maxTimeForUpdateOps)
+	defer cancel()
+
+	retries, err := s.redisRepo.Get(ctx, tsk.Id.String())
+	if err != nil {
+		//not found
+		if errors.Is(err, redis.Nil) {
+			retries = 0
+		} else {
+			//something went wrong
+			s.logger.Error("handleRetryMessage", "status", "failed to fetch retries", "msg", err)
+			return
+		}
+	}
+
+	retries++
+	if retries > s.maxRetries {
+		//publish into failed queue
+		if err := s.publishTask(tsk, queueFailed); err != nil {
+			s.logger.Error("handleRetryMessage", "status", "failed to publish into queue_failed", "msg", err)
+		}
+		return
+	}
+
+	//update redis
+	if err := s.redisRepo.Update(ctx, tsk.Id.String(), retries); err != nil {
+		s.logger.Error("handleRetryMessage", "status", "failed to update retries", "msg", err)
+		return
+	}
+
+	s.logger.Info("handleRetryMessage", "status", fmt.Sprintf("%d/%d: retrying to execute task %s", retries, s.maxRetries, tsk.Id))
+	if err := s.publishTask(tsk, queueTasks); err != nil {
+		s.logger.Error("handleRetryMessage", "status", "failed to send task for a retry", "msg", err)
+		return
+	}
+
+}
+
+func (s *Scheduler) handleFailedMessage(msg amqp091.Delivery) {
+	if err := msg.Ack(false); err != nil {
+		//handle error with logging them
+		s.logger.Error("handleFailedMessage", "status", "failed to ack()", "msg", err)
+		return
+	}
+	// parse the task from body
+	tsk, err := s.parseTask(msg.Body)
+	if err != nil {
+		s.logger.Error("handleFailedMessage", "status", "failed to parse task from body", "msg", err)
+		return
+	}
+
+	ut := task.UpdateTask{
+		Status:     &tsk.Status,
+		ErrMessage: &tsk.ErrMessage,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), s.maxTimeForUpdateOps)
+	defer cancel()
+
+	if _, err := s.taskService.UpdateTask(ctx, tsk, ut); err != nil {
+		s.logger.Error("handleFailedMessage", "status", "failed to update task inside of task service", "msg", err)
+		return
+	}
 }
 
 func (s *Scheduler) handleSuccessMessage(msg amqp091.Delivery) {

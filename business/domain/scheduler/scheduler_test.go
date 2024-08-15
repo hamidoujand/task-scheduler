@@ -2,8 +2,11 @@ package scheduler_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -18,9 +21,13 @@ import (
 	taskRepo "github.com/hamidoujand/task-scheduler/business/domain/task/store/postgres"
 	"github.com/hamidoujand/task-scheduler/business/redistest"
 	"github.com/hamidoujand/task-scheduler/foundation/logger"
+	"github.com/redis/go-redis/v9"
 )
 
+const maxRetries = 1
+
 func TestOnSuccess(t *testing.T) {
+	t.Parallel()
 	setups := setupTest(t, "test_consume_tasks")
 
 	scheduler, err := scheduler.New(scheduler.Config{
@@ -29,7 +36,7 @@ func TestOnSuccess(t *testing.T) {
 		Logger:              setups.logger,
 		TaskService:         setups.taskService,
 		RedisRepo:           setups.redisR,
-		MaxRetries:          1,
+		MaxRetries:          maxRetries,
 		MaxTimeForUpdateOps: time.Minute,
 	})
 
@@ -99,8 +106,10 @@ func TestOnSuccess(t *testing.T) {
 				return
 			}
 			if (fetched1.Status != task.StatusPending) && (fetched2.Status != task.StatusPending) {
-				t.Logf("command: %s Result: %s", fetched1.Command, fetched1.Result)
-				t.Logf("command: %s Result: %s", fetched2.Command, fetched2.Result)
+
+				t.Logf("\ncommand: %s\nResult: %s\n", fetched1.Command, fetched1.Result)
+				t.Logf("\ncommand: %s\nResult: %s\n", fetched2.Command, fetched2.Result)
+
 				if fetched1.ErrMessage != "" {
 					errChan <- fmt.Errorf("errorMessage1=%s , got %s", "<empty>", fetched1.ErrMessage)
 					return
@@ -127,6 +136,179 @@ func TestOnSuccess(t *testing.T) {
 	}
 }
 
+func TestOnFailure(t *testing.T) {
+	t.Parallel()
+	setups := setupTest(t, "test_consume_tasks")
+
+	scheduler, err := scheduler.New(scheduler.Config{
+		MaxRunningTask:      4,
+		RabbitClient:        setups.rabbitC,
+		Logger:              setups.logger,
+		TaskService:         setups.taskService,
+		RedisRepo:           setups.redisR,
+		MaxRetries:          1,
+		MaxTimeForUpdateOps: time.Minute,
+	})
+
+	if err != nil {
+		t.Fatalf("expected to create a scheduler: %s", err)
+	}
+
+	//creates a goroutines inside of it that is waiting for tasks
+	if err := scheduler.ConsumeTasks(context.Background()); err != nil {
+		t.Fatalf("expected to consume tasks: %s", err)
+	}
+
+	if err := scheduler.OnTaskRetry(); err != nil {
+		t.Fatalf("expected to start onTasksRetry: %s", err)
+	}
+
+	if err := scheduler.OnTaskFailure(); err != nil {
+		t.Fatalf("expected to start onTaskFailure: %s", err)
+	}
+
+	now := time.Now()
+	nt1 := task.NewTask{
+		UserId:      uuid.New(),
+		Command:     "invalid-command",
+		Image:       "alpine:3.20",
+		Environment: "APP_NAME=test",
+		ScheduledAt: now,
+	}
+
+	nt2 := task.NewTask{
+		UserId:      uuid.New(),
+		Command:     "ls",
+		Args:        []string{"nowhere"},
+		Image:       "alpine:3.20",
+		Environment: "APP_NAME=test",
+		ScheduledAt: now,
+	}
+
+	nts := []task.NewTask{nt1, nt2}
+	ids := make([]uuid.UUID, 0, len(nts))
+
+	for _, nt := range nts {
+		tsk, err := setups.taskService.CreateTask(context.Background(), nt)
+		if err != nil {
+			t.Fatalf("expected to create task: %s", err)
+		}
+		ids = append(ids, tsk.Id)
+	}
+
+	var redisMonitor sync.WaitGroup
+	redisErrs := make(chan error, 1)
+
+	redisMonitor.Add(1)
+	go func() {
+		defer redisMonitor.Done()
+		//keep watching redis till the task hit 1 retry
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+		defer cancel()
+
+		for attemp := 1; ; attemp++ {
+			retries1, err := setups.redisR.Get(ctx, ids[0].String())
+			if err != nil {
+				//not-found is ok
+				if errors.Is(err, redis.Nil) {
+					time.Sleep(time.Second)
+					continue
+				} else {
+					redisErrs <- fmt.Errorf("get: %w", err)
+					return
+				}
+			}
+
+			retries2, err := setups.redisR.Get(ctx, ids[1].String())
+			if err != nil {
+				//not-found is ok
+				if errors.Is(err, redis.Nil) {
+					time.Sleep(time.Second)
+					continue
+				} else {
+					redisErrs <- fmt.Errorf("get: %w", err)
+					return
+				}
+			}
+
+			if (retries1 == maxRetries) && (retries2 == maxRetries) {
+				//success
+				redisErrs <- nil
+				return
+			}
+			time.Sleep(time.Second)
+		}
+	}()
+
+	redisMonitor.Wait()
+
+	if err := <-redisErrs; err != nil {
+		t.Fatalf("expected onRetry to handle retries: %s", err)
+	}
+
+	var taskServiceMonitor sync.WaitGroup
+	taskErrs := make(chan error, 1)
+
+	taskServiceMonitor.Add(1)
+	go func() {
+		//check db for failure
+		defer taskServiceMonitor.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+		defer cancel()
+
+		for attemp := 1; ; attemp++ {
+			fetched1, err := setups.taskService.GetTaskById(ctx, ids[0])
+			if err != nil {
+				taskErrs <- fmt.Errorf("getTaskById: %w", err)
+				return
+			}
+
+			fetched2, err := setups.taskService.GetTaskById(ctx, ids[1])
+			if err != nil {
+				taskErrs <- fmt.Errorf("getTaskById: %w", err)
+				return
+			}
+
+			if (fetched1.Status != task.StatusPending) && (fetched2.Status != task.StatusPending) {
+				if fetched1.Status != task.StatusFailed {
+					taskErrs <- fmt.Errorf("status1=%s, got %s", task.StatusFailed, fetched1.Status)
+					return
+				}
+				if fetched2.Status != task.StatusFailed {
+					taskErrs <- fmt.Errorf("status2=%s, got %s", task.StatusFailed, fetched2.Status)
+					return
+				}
+
+				if fetched1.ErrMessage == "" {
+					taskErrs <- fmt.Errorf("errorMessage1=%s, got %s", "<empty>", fetched1.ErrMessage)
+					return
+				}
+
+				if fetched2.ErrMessage == "" {
+					taskErrs <- fmt.Errorf("errorMessage1=%s, got %s", "<empty>", fetched2.ErrMessage)
+					return
+				}
+
+				t.Logf("\ncommand: %s\nErrorMessage: %s\n", fetched1.Command, fetched1.ErrMessage)
+				t.Logf("\ncommand: %s\nErrorMessage: %s\n", fetched2.Command, fetched2.ErrMessage)
+
+				taskErrs <- nil
+				return
+			}
+			time.Sleep(time.Second)
+		}
+	}()
+
+	taskServiceMonitor.Wait()
+	if err := <-taskErrs; err != nil {
+		t.Fatalf("expected the onFailure handle the failed task: %s", err)
+	}
+
+	if err := scheduler.Shutdown(context.Background()); err != nil {
+		t.Fatalf("expected to get a clean shutdown: %s", err)
+	}
+}
+
 type setup struct {
 	logger      *slog.Logger
 	taskService *task.Service
@@ -135,9 +317,18 @@ type setup struct {
 }
 
 func setupTest(t *testing.T, container string) setup {
-	rabbitC := brokertest.NewTestClient(t, context.Background(), container+"_rebbitmq")
-	redisC := redistest.NewRedisClient(t, context.Background(), container+"_redis")
-	postgresC := dbtest.NewDatabaseClient(t, container+"_postgres")
+	alpha := "abcdefghijklmnopqrstuvwxyz"
+	var builder strings.Builder
+	for range 8 {
+		idx := rand.IntN(len(alpha))
+		builder.WriteByte(alpha[idx])
+	}
+
+	salt := builder.String()
+
+	rabbitC := brokertest.NewTestClient(t, context.Background(), container+"_rebbitmq_"+salt)
+	redisC := redistest.NewRedisClient(t, context.Background(), container+"_redis_"+salt)
+	postgresC := dbtest.NewDatabaseClient(t, container+"_postgres_"+salt)
 	logger := logger.NewCustomLogger(slog.LevelInfo, false, slog.String("Env", "Test"))
 	store := taskRepo.NewRepository(postgresC)
 	redisRepo := redisRepo.NewRepository(redisC)
