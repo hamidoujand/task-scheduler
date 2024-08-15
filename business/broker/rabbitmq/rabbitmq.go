@@ -2,12 +2,10 @@ package rabbitmq
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"time"
 
-	"github.com/rabbitmq/amqp091-go"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -106,15 +104,6 @@ func (rc *Client) DeclareQueue(name string) error {
 
 // Publish enqueues the message into the queue or returns possible errors.
 func (rc *Client) Publish(queue string, msg []byte) error {
-	//enable publisher confirm
-	err := rc.channel.Confirm(false)
-	if err != nil {
-		return fmt.Errorf("confirm channel: %w", err)
-	}
-
-	confirmChan := make(chan amqp091.Confirmation, 1)
-	rc.channel.NotifyPublish(confirmChan)
-
 	if err := rc.channel.Publish(
 		"",
 		queue,
@@ -129,10 +118,6 @@ func (rc *Client) Publish(queue string, msg []byte) error {
 		return fmt.Errorf("publish: %w", err)
 	}
 
-	//confirm the delivery to broker
-	if confirmed := <-confirmChan; !confirmed.Ack {
-		return errors.New("message was not confirmed")
-	}
 	return nil
 }
 
