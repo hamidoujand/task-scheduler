@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -14,22 +15,30 @@ import (
 	"github.com/hamidoujand/task-scheduler/app/api/mid"
 	"github.com/hamidoujand/task-scheduler/business/broker/rabbitmq"
 	"github.com/hamidoujand/task-scheduler/business/database/postgres"
+	"github.com/hamidoujand/task-scheduler/business/domain/scheduler"
+	redisRepo "github.com/hamidoujand/task-scheduler/business/domain/scheduler/store/redis"
 	"github.com/hamidoujand/task-scheduler/business/domain/task"
 	taskPostgresRepo "github.com/hamidoujand/task-scheduler/business/domain/task/store/postgres"
 	"github.com/hamidoujand/task-scheduler/business/domain/user"
 	userPostgresRepo "github.com/hamidoujand/task-scheduler/business/domain/user/store/postgres"
 	"github.com/hamidoujand/task-scheduler/foundation/web"
+	"github.com/redis/go-redis/v9"
 )
 
 type Config struct {
-	Shutdown       chan os.Signal
-	Logger         *slog.Logger
-	Validator      *errs.AppValidator
-	PostgresClient *postgres.Client
-	ActiveKID      string
-	TokenAge       time.Duration
-	Keystore       auth.Keystore
-	RClient        *rabbitmq.Client
+	Shutdown                    chan os.Signal
+	Logger                      *slog.Logger
+	Validator                   *errs.AppValidator
+	PostgresClient              *postgres.Client
+	ActiveKID                   string
+	TokenAge                    time.Duration
+	Keystore                    auth.Keystore
+	RClient                     *rabbitmq.Client
+	RedisClient                 *redis.Client
+	MaxRunningTasks             int
+	MaxFailedTasksRetry         int
+	MaxTimeForTaskUpdates       time.Duration
+	MaxTimeForSchedulerShutdown time.Duration
 }
 
 func RegisterRoutes(conf Config) (*web.App, error) {
@@ -67,6 +76,64 @@ func RegisterRoutes(conf Config) (*web.App, error) {
 		ActiveKID:    conf.ActiveKID,
 		TokenAge:     conf.TokenAge,
 	}
+
+	//redisRepo
+	redisR := redisRepo.NewRepository(conf.RedisClient)
+
+	//setup scheduler
+	scheduler, err := scheduler.New(scheduler.Config{
+		RabbitClient:        conf.RClient,
+		Logger:              conf.Logger,
+		TaskService:         taskService,
+		RedisRepo:           redisR,
+		MaxRunningTask:      conf.MaxRunningTasks,
+		MaxRetries:          conf.MaxFailedTasksRetry,
+		MaxTimeForUpdateOps: conf.MaxTimeForTaskUpdates,
+	})
+
+	if conf.MaxTimeForSchedulerShutdown <= 0 {
+		conf.MaxTimeForSchedulerShutdown = time.Minute
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("creating scheduler: %w", err)
+	}
+
+	//setup all consumers
+	if err := scheduler.ConsumeTasks(); err != nil {
+		return nil, fmt.Errorf("task consumer: %w", err)
+	}
+
+	if err := scheduler.OnTaskSuccess(); err != nil {
+		return nil, fmt.Errorf("on task success consumer: %w", err)
+	}
+
+	if err := scheduler.OnTaskRetry(); err != nil {
+		return nil, fmt.Errorf("on task retry consumer: %w", err)
+	}
+
+	if err := scheduler.OnTaskFailure(); err != nil {
+		return nil, fmt.Errorf("on task failure: %w", err)
+	}
+
+	if err := scheduler.MonitorScheduledTasks(); err != nil {
+		return nil, fmt.Errorf("monitor scheduled tasks: %w", err)
+	}
+
+	//scheduler monitor
+	//long-lived goroutine
+	go func() {
+		//wait for server shutdown
+		<-conf.Shutdown
+		conf.Logger.Info("scheduler", "status", "received shutdown signal", "msg", "shutting down scheduler")
+		ctx, cancel := context.WithTimeout(context.Background(), conf.MaxTimeForSchedulerShutdown)
+		defer cancel()
+
+		if err := scheduler.Shutdown(ctx); err != nil {
+			conf.Logger.Error("scheduler", "status", "failed to gracfully shutdown", "msg", err)
+			return
+		}
+	}()
 
 	//==============================================================================
 	//tasks
