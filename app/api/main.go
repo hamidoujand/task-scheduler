@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
 	"github.com/ardanlabs/conf/v3"
 	"github.com/hamidoujand/task-scheduler/app/api/errs"
 	"github.com/hamidoujand/task-scheduler/app/api/handlers"
+	"github.com/hamidoujand/task-scheduler/business/broker/rabbitmq"
 	"github.com/hamidoujand/task-scheduler/business/database/postgres"
 	"github.com/hamidoujand/task-scheduler/foundation/keystore"
 	"github.com/hamidoujand/task-scheduler/foundation/logger"
@@ -66,6 +68,19 @@ func run() error {
 			Password string        `conf:"default:"`
 			DBIdx    int           `conf:"default:0"`
 			Timeout  time.Duration `conf:"default:5s"`
+		}
+
+		RabbitMQ struct {
+			Host                 string        `conf:"default:localhost:5672"`
+			User                 string        `conf:"default:guest"`
+			Password             string        `conf:"default:guest"`
+			MaxTimeForConnection time.Duration `conf:"default:1m"`
+		}
+
+		Scheduler struct {
+			MaxFailedTasksRetries       int           `conf:"default:1"`
+			MaxTimeForTaskUpdates       time.Duration `conf:"default:1m"` //slow machine maybe
+			MaxTimeForGraceFullShutdown time.Duration `conf:"default:1m"`
 		}
 	}{}
 
@@ -157,6 +172,24 @@ func run() error {
 		return fmt.Errorf("redis ping: %w", err)
 	}
 	logger.Info("redis", "status", "successfully connected")
+
+	//==========================================================================
+	// rabbitmq setup
+	logger.Info("rabbitmq", "status", "setting up the connection")
+	ctx, cancel = context.WithTimeout(context.Background(), configs.RabbitMQ.MaxTimeForConnection)
+	defer cancel()
+
+	rabbitMQC, err := rabbitmq.NewClient(ctx, rabbitmq.Configs{
+		Host:     configs.RabbitMQ.Host,
+		User:     configs.RabbitMQ.User,
+		Password: configs.RabbitMQ.Password,
+	})
+	if err != nil {
+		return fmt.Errorf("new rabbitmq client: %w", err)
+	}
+
+	logger.Info("rabbitmq", "status", "connection successfully made to the server")
+
 	//==========================================================================
 	//server
 
@@ -165,15 +198,24 @@ func run() error {
 
 	signal.Notify(shutdownCh, syscall.SIGTERM, syscall.SIGINT)
 
+	maxRunningTasks := runtime.GOMAXPROCS(0)
+
 	app, err := handlers.RegisterRoutes(handlers.Config{
-		Shutdown:       shutdownCh,
-		Logger:         logger,
-		Validator:      appValidator,
-		PostgresClient: client,
-		ActiveKID:      configs.Auth.ActiveKid,
-		TokenAge:       configs.Auth.TokenAge,
-		Keystore:       ks,
+		Shutdown:                    shutdownCh,
+		Logger:                      logger,
+		Validator:                   appValidator,
+		PostgresClient:              client,
+		ActiveKID:                   configs.Auth.ActiveKid,
+		TokenAge:                    configs.Auth.TokenAge,
+		Keystore:                    ks,
+		RClient:                     rabbitMQC,
+		RedisClient:                 redisClient,
+		MaxRunningTasks:             maxRunningTasks,
+		MaxFailedTasksRetry:         configs.Scheduler.MaxFailedTasksRetries,
+		MaxTimeForTaskUpdates:       configs.Scheduler.MaxTimeForTaskUpdates,
+		MaxTimeForSchedulerShutdown: configs.Scheduler.MaxTimeForGraceFullShutdown,
 	})
+
 	if err != nil {
 		return fmt.Errorf("register routes: %w", err)
 	}
