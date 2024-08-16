@@ -29,28 +29,30 @@ const (
 
 // Scheduler represents set of APIs used for scheduling tasks using worker.
 type Scheduler struct {
-	rClient             *rabbitmq.Client
-	redisRepo           *redisRepo.Repository
-	logger              *slog.Logger
-	taskService         *task.Service
-	maxRetries          int
-	maxTimeForUpdateOps time.Duration
-	wg                  sync.WaitGroup
-	mu                  sync.RWMutex
-	sem                 chan struct{}
-	shutdown            chan struct{}
-	executers           map[string]context.CancelFunc
+	rClient                 *rabbitmq.Client
+	redisRepo               *redisRepo.Repository
+	logger                  *slog.Logger
+	taskService             *task.Service
+	maxRetries              int
+	maxTimeForUpdateOps     time.Duration
+	maxTimeForTaskExecution time.Duration
+	wg                      sync.WaitGroup
+	mu                      sync.RWMutex
+	sem                     chan struct{}
+	shutdown                chan struct{}
+	executers               map[string]context.CancelFunc
 }
 
 // Config represents all of required configuration to create a scheduler.
 type Config struct {
-	RabbitClient        *rabbitmq.Client
-	Logger              *slog.Logger
-	TaskService         *task.Service
-	RedisRepo           *redisRepo.Repository
-	MaxRunningTask      int
-	MaxRetries          int
-	MaxTimeForUpdateOps time.Duration
+	RabbitClient            *rabbitmq.Client
+	Logger                  *slog.Logger
+	TaskService             *task.Service
+	RedisRepo               *redisRepo.Repository
+	MaxRunningTask          int
+	MaxRetries              int
+	MaxTimeForUpdateOps     time.Duration
+	MaxTimeForTaskExecution time.Duration
 }
 
 // New creates a scheduler.
@@ -76,16 +78,21 @@ func New(conf Config) (*Scheduler, error) {
 		return nil, fmt.Errorf("max retries must be greater or equal to 0: %d", conf.MaxRetries)
 	}
 
+	if conf.MaxTimeForTaskExecution <= 0 {
+		return nil, fmt.Errorf("max time for task execution must be greater than 0")
+	}
+
 	return &Scheduler{
-		rClient:             conf.RabbitClient,
-		logger:              conf.Logger,
-		taskService:         conf.TaskService,
-		redisRepo:           conf.RedisRepo,
-		maxRetries:          conf.MaxRetries,
-		sem:                 sem,
-		shutdown:            make(chan struct{}),
-		executers:           make(map[string]context.CancelFunc),
-		maxTimeForUpdateOps: conf.MaxTimeForUpdateOps,
+		rClient:                 conf.RabbitClient,
+		logger:                  conf.Logger,
+		taskService:             conf.TaskService,
+		redisRepo:               conf.RedisRepo,
+		maxRetries:              conf.MaxRetries,
+		sem:                     sem,
+		shutdown:                make(chan struct{}),
+		executers:               make(map[string]context.CancelFunc),
+		maxTimeForUpdateOps:     conf.MaxTimeForUpdateOps,
+		maxTimeForTaskExecution: conf.MaxTimeForTaskExecution,
 	}, nil
 }
 
@@ -123,7 +130,7 @@ func (s *Scheduler) Shutdown(ctx context.Context) error {
 }
 
 // ConsumeTasks will listen to the "tasks" queue for new tasks.
-func (s *Scheduler) ConsumeTasks(ctx context.Context) error {
+func (s *Scheduler) ConsumeTasks() error {
 	msgs, err := s.rClient.Consumer(queueTasks)
 	if err != nil {
 		return fmt.Errorf("create consumer: %w", err)
@@ -134,7 +141,7 @@ func (s *Scheduler) ConsumeTasks(ctx context.Context) error {
 		for msg := range msgs {
 			select {
 			case <-s.shutdown:
-				//do not proccess messages
+				//do not proccess messages any more.
 				return
 			default:
 				if err := msg.Ack(false); err != nil {
@@ -148,7 +155,7 @@ func (s *Scheduler) ConsumeTasks(ctx context.Context) error {
 					continue
 				}
 
-				if err := s.submitTask(ctx, tsk); err != nil {
+				if err := s.submitTask(tsk); err != nil {
 					s.logger.Error("consumeTasks", "status", "failed to submit task to executer", "msg", err)
 					continue
 				}
@@ -159,24 +166,24 @@ func (s *Scheduler) ConsumeTasks(ctx context.Context) error {
 	return nil
 }
 
-func (s *Scheduler) submitTask(ctx context.Context, tsk task.Task) error {
+func (s *Scheduler) submitTask(tsk task.Task) error {
 	//wait for a semaphore
 	select {
 	case <-s.shutdown:
 		return errors.New("received shutdown signal")
-	case <-ctx.Done(): //provided context is only used to get a semaphore not for running tasks.
-		return ctx.Err()
 	case <-s.sem:
 		//move on
 	}
 
 	executerId := uuid.NewString()
 
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		//set a default deadline
-		deadline = time.Now().Add(time.Minute)
+	//default we gave a 30 sec
+	if s.maxTimeForTaskExecution < time.Second*30 {
+		s.maxTimeForTaskExecution = time.Second * 30
 	}
+
+	//set a deadline
+	deadline := time.Now().Add(s.maxTimeForTaskExecution)
 
 	//create a new ctx that only scheduler uses to control executers
 	ctx, cancel := context.WithDeadline(context.Background(), deadline)
@@ -256,14 +263,9 @@ func (s *Scheduler) OnTaskSuccess() error {
 	//consumer
 	go func() {
 		for msg := range msgs {
-			select {
-			case <-s.shutdown:
-				s.logger.Info("onTaskSuccess", "status", "received shutdown signal", "msg", "shutting down")
-				return
-			default:
-				//handle message
-				go s.handleSuccessMessage(msg)
-			}
+			//handle message.
+			//we need to ignore shutdown in here in case an executer manages to be in middle of a publish.
+			go s.handleSuccessMessage(msg)
 		}
 	}()
 
@@ -280,13 +282,9 @@ func (s *Scheduler) OnTaskFailure() error {
 	//consumer
 	go func() {
 		for msg := range msgs {
-			select {
-			case <-s.shutdown:
-				s.logger.Info("onTaskFailure", "status", "received shutdown signal", "msg", "shutting down")
-				return
-			default:
-				go s.handleFailedMessage(msg)
-			}
+			//we need this to ignore shutdown in case an executer manages to be in middle of a publish
+			//so we able to update that task.
+			go s.handleFailedMessage(msg)
 		}
 	}()
 
@@ -305,7 +303,17 @@ func (s *Scheduler) OnTaskRetry() error {
 		for msg := range msgs {
 			select {
 			case <-s.shutdown:
+				//do not send for retry since there is not consumer listening anymore on "tasks queue".
 				s.logger.Info("onTaskRetry", "status", "received shutdown signal", "msg", "shutting down")
+				//update the task as failure since we can not retry it any more
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					s.handleFailedMessage(msg)
+				}()
+				wg.Wait()
+
 				return
 			default:
 				go s.handleRetryMessage(msg)
@@ -318,22 +326,23 @@ func (s *Scheduler) OnTaskRetry() error {
 
 // MonitorScheduledTasks fetches all of the tasks that have less than or equal
 // to one minute to their scheduledAt deadline every one minute.
-// DO NOT PASS "deadline/timeout context", use a long-lived context such as "context.WithCancel()"
-func (s *Scheduler) MonitorScheduledTasks(ctx context.Context) error {
-	if _, ok := ctx.Deadline(); ok {
-		return errors.New("use a long-lived context such as context.WithCancel()")
-	}
-
+func (s *Scheduler) MonitorScheduledTasks() error {
 	//monitor
 	go func() {
+		//this is a long-lived ctx used inside of the loop for any db operation, and
+		//will be canceled as soon as we receive shutdown signal.
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 
 		for range ticker.C {
 			select {
-			case <-ctx.Done():
-				s.logger.Info("monitorScheduledTasks", "status", "received cancel signal", "msg", "cancelling")
+			case <-s.shutdown:
+				s.logger.Info("monitorScheduledTasks", "status", "received shutdown signal", "msg", "shutting down")
 				return
+
 			default:
 				dueTasks, err := s.taskService.GetAllDueTasks(ctx)
 				if err != nil {

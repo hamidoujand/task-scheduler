@@ -27,17 +27,22 @@ import (
 const maxRetries = 1
 
 func TestOnSuccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping long-running test.")
+	}
+
 	t.Parallel()
 	setups := setupTest(t, "test_on_success_tasks")
 
 	scheduler, err := scheduler.New(scheduler.Config{
-		MaxRunningTask:      4,
-		RabbitClient:        setups.rabbitC,
-		Logger:              setups.logger,
-		TaskService:         setups.taskService,
-		RedisRepo:           setups.redisR,
-		MaxRetries:          maxRetries,
-		MaxTimeForUpdateOps: time.Minute,
+		MaxRunningTask:          4,
+		RabbitClient:            setups.rabbitC,
+		Logger:                  setups.logger,
+		TaskService:             setups.taskService,
+		RedisRepo:               setups.redisR,
+		MaxRetries:              maxRetries,
+		MaxTimeForUpdateOps:     time.Minute,
+		MaxTimeForTaskExecution: time.Minute,
 	})
 
 	if err != nil {
@@ -45,7 +50,7 @@ func TestOnSuccess(t *testing.T) {
 	}
 
 	//creates a goroutines inside of it that is waiting for tasks
-	if err := scheduler.ConsumeTasks(context.Background()); err != nil {
+	if err := scheduler.ConsumeTasks(); err != nil {
 		t.Fatalf("expected to consume tasks: %s", err)
 	}
 
@@ -137,17 +142,22 @@ func TestOnSuccess(t *testing.T) {
 }
 
 func TestOnFailure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping long-running test.")
+	}
+
 	t.Parallel()
 	setups := setupTest(t, "test_on_failure_tasks")
 
 	scheduler, err := scheduler.New(scheduler.Config{
-		MaxRunningTask:      4,
-		RabbitClient:        setups.rabbitC,
-		Logger:              setups.logger,
-		TaskService:         setups.taskService,
-		RedisRepo:           setups.redisR,
-		MaxRetries:          1,
-		MaxTimeForUpdateOps: time.Minute,
+		MaxRunningTask:          4,
+		RabbitClient:            setups.rabbitC,
+		Logger:                  setups.logger,
+		TaskService:             setups.taskService,
+		RedisRepo:               setups.redisR,
+		MaxRetries:              1,
+		MaxTimeForUpdateOps:     time.Minute,
+		MaxTimeForTaskExecution: time.Minute,
 	})
 
 	if err != nil {
@@ -155,7 +165,7 @@ func TestOnFailure(t *testing.T) {
 	}
 
 	//creates a goroutines inside of it that is waiting for tasks
-	if err := scheduler.ConsumeTasks(context.Background()); err != nil {
+	if err := scheduler.ConsumeTasks(); err != nil {
 		t.Fatalf("expected to consume tasks: %s", err)
 	}
 
@@ -310,17 +320,22 @@ func TestOnFailure(t *testing.T) {
 }
 
 func TestMonitorScheduledTasks(t *testing.T) {
+	//short mode enable skip this long running test
+	if testing.Short() {
+		t.Skip("skipping long running test due to its needs to poll db for scheduled tasks each minute.")
+	}
 	t.Parallel()
 	setups := setupTest(t, "test_monitor_scheduled_tasks")
 
 	scheduler, err := scheduler.New(scheduler.Config{
-		MaxRunningTask:      4,
-		RabbitClient:        setups.rabbitC,
-		Logger:              setups.logger,
-		TaskService:         setups.taskService,
-		RedisRepo:           setups.redisR,
-		MaxRetries:          maxRetries,
-		MaxTimeForUpdateOps: time.Minute,
+		MaxRunningTask:          4,
+		RabbitClient:            setups.rabbitC,
+		Logger:                  setups.logger,
+		TaskService:             setups.taskService,
+		RedisRepo:               setups.redisR,
+		MaxRetries:              maxRetries,
+		MaxTimeForUpdateOps:     time.Minute,
+		MaxTimeForTaskExecution: time.Minute,
 	})
 
 	if err != nil {
@@ -328,7 +343,7 @@ func TestMonitorScheduledTasks(t *testing.T) {
 	}
 
 	//creates a goroutines inside of it that is waiting for tasks
-	if err := scheduler.ConsumeTasks(context.Background()); err != nil {
+	if err := scheduler.ConsumeTasks(); err != nil {
 		t.Fatalf("expected to consume tasks: %s", err)
 	}
 
@@ -337,10 +352,7 @@ func TestMonitorScheduledTasks(t *testing.T) {
 		t.Fatalf("expected to run onTaskSuccess: %s", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	if err := scheduler.MonitorScheduledTasks(ctx); err != nil {
+	if err := scheduler.MonitorScheduledTasks(); err != nil {
 		t.Fatalf("expected to start monitor service: %s", err)
 	}
 
