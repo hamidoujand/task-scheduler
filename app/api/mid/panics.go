@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
+	"github.com/hamidoujand/task-scheduler/app/api/errs"
 	"github.com/hamidoujand/task-scheduler/foundation/web"
 )
 

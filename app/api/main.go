@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/ardanlabs/conf/v3"
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/handlers"
+	"github.com/hamidoujand/task-scheduler/app/api/errs"
+	"github.com/hamidoujand/task-scheduler/app/api/handlers"
 	"github.com/hamidoujand/task-scheduler/business/database/postgres"
 	"github.com/hamidoujand/task-scheduler/foundation/keystore"
 	"github.com/hamidoujand/task-scheduler/foundation/logger"

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
+	"github.com/hamidoujand/task-scheduler/app/api/errs"
 	"github.com/hamidoujand/task-scheduler/foundation/web"
 )
 

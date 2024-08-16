@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/auth"
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/handlers/tasks"
+	"github.com/hamidoujand/task-scheduler/app/api/auth"
+	"github.com/hamidoujand/task-scheduler/app/api/errs"
+	"github.com/hamidoujand/task-scheduler/app/api/handlers/tasks"
 	"github.com/hamidoujand/task-scheduler/business/brokertest"
 	"github.com/hamidoujand/task-scheduler/business/domain/task"
 	"github.com/hamidoujand/task-scheduler/business/domain/task/store/memory"

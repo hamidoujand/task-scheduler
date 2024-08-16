@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
+	"github.com/hamidoujand/task-scheduler/app/api/errs"
 )
 
 func TestAppValidator_Check(t *testing.T) {

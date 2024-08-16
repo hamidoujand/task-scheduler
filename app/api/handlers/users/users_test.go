@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/auth"
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/handlers/users"
+	"github.com/hamidoujand/task-scheduler/app/api/auth"
+	"github.com/hamidoujand/task-scheduler/app/api/errs"
+	"github.com/hamidoujand/task-scheduler/app/api/handlers/users"
 	"github.com/hamidoujand/task-scheduler/business/domain/user"
 	"github.com/hamidoujand/task-scheduler/business/domain/user/store/memory"
 	"golang.org/x/crypto/bcrypt"

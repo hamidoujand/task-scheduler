@@ -9,7 +9,7 @@ ARG BUILD
 # since we aredoing vendoring, copy everything into /service 
 COPY . /service 
 
-WORKDIR /service/app/services/scheduler/api/
+WORKDIR /service/app/api/
 
 # build tasks bin 
 RUN go build -ldflags "-X main.build =${BUILD}" 
@@ -24,7 +24,7 @@ FROM alpine:3.20.2
 RUN addgroup -g 1000 -S tasks && adduser -u 1000 -h /service -G tasks -S tasks 
 
 # copy bin 
-COPY --from=build --chown=tasks:tasks /service/app/services/scheduler/api/api /service/api 
+COPY --from=build --chown=tasks:tasks /service/app/api/api /service/api 
 
 WORKDIR /service
 

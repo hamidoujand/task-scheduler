@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/auth"
-	"github.com/hamidoujand/task-scheduler/app/services/scheduler/api/errs"
+	"github.com/hamidoujand/task-scheduler/app/api/auth"
+	"github.com/hamidoujand/task-scheduler/app/api/errs"
 	"github.com/hamidoujand/task-scheduler/foundation/web"
 )
 
