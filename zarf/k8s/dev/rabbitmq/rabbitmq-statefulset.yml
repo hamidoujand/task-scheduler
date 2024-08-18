@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-svc
+  namespace: tasks-system
+spec:
+  ports:
+    - port: 5672
+      name: amqp
+      targetPort: amqp
+  clusterIP: None
+  selector:
+    app: rabbitmq
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq-sts
+  namespace: tasks-system
+spec:
+  serviceName: "rabbitmq-svc"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3.13.6
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "250m" #25ms/100ms 1/4 core.
+          ports:
+            - containerPort: 5672 # AMQP port
+              name: amqp
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
+          livenessProbe:
+            exec:
+              command:
+                - rabbitmq-diagnostics
+                - status
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 15
+          readinessProbe:
+            exec:
+              command:
+                - rabbitmq-diagnostics
+                - ping
+            initialDelaySeconds: 20
+            periodSeconds: 60
+            timeoutSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmq-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 200Mi

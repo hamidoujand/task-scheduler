@@ -12,12 +12,11 @@ COPY . /service
 WORKDIR /service/app/api/
 
 # build tasks bin 
-RUN go build -ldflags "-X main.build =${BUILD}" 
-
+RUN go build -ldflags "-X main.build=${BUILD}" 
 
 
 # run bin inside Alpine
-FROM alpine:3.20.2
+FROM alpine:3.20
 
 # create a new system group for services and daemons and create a system user that only allowed to run services 
 # for reducing security risks inside of the container .
