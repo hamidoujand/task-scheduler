@@ -14,7 +14,7 @@ import (
 
 // NewDatabaseClient creates a container off of a postgres image and create a client to be used in testing.
 func NewDatabaseClient(t *testing.T, name string) *postgres.Client {
-	image := "postgres:latest"
+	image := "postgres:16.3"
 	port := "5432"
 	dockerArgs := []string{"-e", "POSTGRES_PASSWORD=password"}
 	appArgs := []string{"-c", "log_statement=all"}

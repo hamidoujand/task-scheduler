@@ -11,7 +11,7 @@ import (
 )
 
 func NewTestClient(t *testing.T, ctx context.Context, containerName string) *rabbitmq.Client {
-	image := "rabbitmq:latest"
+	image := "rabbitmq:3.13.6"
 
 	c, err := docker.StartContainer(image, containerName, "5672", nil, nil)
 	if err != nil {

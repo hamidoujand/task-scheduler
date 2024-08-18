@@ -1,4 +1,4 @@
-FROM golang:1.22.5 AS build
+FROM golang:1.23.0 AS build
 
 # disable cgo 
 ENV CGO_ENABLED=0

@@ -45,7 +45,7 @@ func run() error {
 		}
 
 		DB struct {
-			User            string        `conf:"default:hamid"`
+			User            string        `conf:"default:postgres"`
 			Password        string        `conf:"default:password,mask"`
 			Host            string        `conf:"default:localhost:5432"`
 			Name            string        `conf:"default:postgres"`
@@ -84,7 +84,7 @@ func run() error {
 		}
 	}{}
 
-	prefix := "SCHEDULER"
+	prefix := "TASKS"
 	if help, err := conf.Parse(prefix, &configs); err != nil {
 		if errors.Is(err, conf.ErrHelpWanted) {
 			fmt.Println(help)

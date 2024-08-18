@@ -12,7 +12,7 @@ import (
 
 func NewRedisClient(t *testing.T, ctx context.Context, name string) *redis.Client {
 	// setup
-	image := "redis:latest"
+	image := "redis:7.4.0"
 	internalPort := "6379"
 	c, err := docker.StartContainer(image, name, internalPort, nil, nil)
 	if err != nil {
