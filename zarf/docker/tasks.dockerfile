@@ -22,6 +22,8 @@ FROM alpine:3.20
 # for reducing security risks inside of the container .
 RUN addgroup -g 1000 -S tasks && adduser -u 1000 -h /service -G tasks -S tasks 
 
+#copy dev-auth-key 
+COPY --from=build --chown=tasks:tasks /service/zarf/keys/. /service/zarf/keys/.
 # copy bin 
 COPY --from=build --chown=tasks:tasks /service/app/api/api /service/api 
 

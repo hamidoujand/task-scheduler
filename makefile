@@ -29,7 +29,8 @@ tasks:
 		.
 
 
-### k8s
+#===============================================================================
+# K8S 
 dev-apply:
 	kubectl apply -f zarf/k8s/base/namespace.yml
 	kubectl apply -f zarf/k8s/dev/postgres/postgres-statefulset.yml
@@ -41,18 +42,40 @@ dev-apply:
 	kubectl apply -f zarf/k8s/dev/redis/redis-statefulset.yml	
 	kubectl rollout status --namespace=$(NAMESPACE) --watch --timeout=120s sts/redis-sts
 
+	kubectl apply -f zarf/k8s/dev/tasks/tasks-configmap.yml
+	kubectl apply -f zarf/k8s/dev/tasks/tasks-deployment.yml 
+
 dev-delete-services:
 	kubectl delete -f zarf/k8s/dev/postgres/postgres-statefulset.yml
 	kubectl delete -f zarf/k8s/dev/rabbitmq/rabbitmq-statefulset.yml 
 	kubectl delete -f zarf/k8s/dev/redis/redis-statefulset.yml	
+	kubectl delete -f zarf/k8s/dev/tasks/tasks-configmap.yml
+	kubectl delete -f zarf/k8s/dev/tasks/tasks-deployment.yml 
 
 	kubectl delete -f zarf/k8s/base/namespace.yml
 
 dev-status:
-	kubectl get pods -n tasks-system
+	kubectl get pods -n tasks-system -w
 
-run:
-	SCHEDULER_API_ENVIRONMENT=development go run app/api/main.go 
+dev-restart:
+	kubectl rollout restart deployment tasks-depl --namespace=$(NAMESPACE)
+
+dev-update: build dev-restart
+
+dev-update-apply: build dev-apply
+
+dev-logs:
+	kubectl logs --namespace=$(NAMESPACE) -l app=tasks --all-containers=true -f --tail=100 --max-log-requests=6
+
+dev-logs-db:
+	kubectl logs --namespace=$(NAMESPACE) -l app=postgres-sts --all-containers=true -f --tail=100
+
+
+#===============================================================================
+# Tests 
+test: 
+	CGO_ENABLED=0 go test -timeout=5m -count=1 ./...
+
 
 tidy:
 	go mod tidy 

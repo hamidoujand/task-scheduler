@@ -39,6 +39,7 @@ type Config struct {
 	MaxFailedTasksRetry         int
 	MaxTimeForTaskUpdates       time.Duration
 	MaxTimeForSchedulerShutdown time.Duration
+	MaxTimeForTaskExecution     time.Duration
 }
 
 func RegisterRoutes(conf Config) (*web.App, error) {
@@ -82,13 +83,14 @@ func RegisterRoutes(conf Config) (*web.App, error) {
 
 	//setup scheduler
 	scheduler, err := scheduler.New(scheduler.Config{
-		RabbitClient:        conf.RClient,
-		Logger:              conf.Logger,
-		TaskService:         taskService,
-		RedisRepo:           redisR,
-		MaxRunningTask:      conf.MaxRunningTasks,
-		MaxRetries:          conf.MaxFailedTasksRetry,
-		MaxTimeForUpdateOps: conf.MaxTimeForTaskUpdates,
+		RabbitClient:            conf.RClient,
+		Logger:                  conf.Logger,
+		TaskService:             taskService,
+		RedisRepo:               redisR,
+		MaxRunningTask:          conf.MaxRunningTasks,
+		MaxRetries:              conf.MaxFailedTasksRetry,
+		MaxTimeForUpdateOps:     conf.MaxTimeForTaskUpdates,
+		MaxTimeForTaskExecution: conf.MaxTimeForTaskExecution,
 	})
 
 	if conf.MaxTimeForSchedulerShutdown <= 0 {

@@ -71,7 +71,7 @@ spec:
                 - localhost
                 - -U
                 - postgres
-            initialDelaySeconds: 10
+            initialDelaySeconds: 5
             timeoutSeconds: 5
 ---
 apiVersion: v1

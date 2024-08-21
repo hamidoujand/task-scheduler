@@ -57,20 +57,20 @@ func run() error {
 		}
 
 		Auth struct {
-			KeysFolder string        `conf:"default:/zarf/keys/"`
+			KeysFolder string        `conf:"default:zarf/keys/"`
 			ActiveKid  string        `conf:"default:a41bace0-da3c-4119-85ad-bbd293bf31ee"`
 			Issuer     string        `conf:"default:task scheduler"`
-			TokenAge   time.Duration `conf:"default:1y"`
+			TokenAge   time.Duration `conf:"default:24h"`
 		}
 
 		Redis struct {
 			Host     string        `conf:"default:localhost:6379"`
-			Password string        `conf:"default:"`
+			Password string        `conf:"default:'',"`
 			DBIdx    int           `conf:"default:0"`
 			Timeout  time.Duration `conf:"default:5s"`
 		}
 
-		RabbitMQ struct {
+		Rabbitmq struct {
 			Host                 string        `conf:"default:localhost:5672"`
 			User                 string        `conf:"default:guest"`
 			Password             string        `conf:"default:guest"`
@@ -81,6 +81,7 @@ func run() error {
 			MaxFailedTasksRetries       int           `conf:"default:1"`
 			MaxTimeForTaskUpdates       time.Duration `conf:"default:1m"` //slow machine maybe
 			MaxTimeForGraceFullShutdown time.Duration `conf:"default:1m"`
+			MaxTimeForTaskExecution     time.Duration `conf:"default:1m"`
 		}
 	}{}
 
@@ -176,13 +177,13 @@ func run() error {
 	//==========================================================================
 	// rabbitmq setup
 	logger.Info("rabbitmq", "status", "setting up the connection")
-	ctx, cancel = context.WithTimeout(context.Background(), configs.RabbitMQ.MaxTimeForConnection)
+	ctx, cancel = context.WithTimeout(context.Background(), configs.Rabbitmq.MaxTimeForConnection)
 	defer cancel()
 
 	rabbitMQC, err := rabbitmq.NewClient(ctx, rabbitmq.Configs{
-		Host:     configs.RabbitMQ.Host,
-		User:     configs.RabbitMQ.User,
-		Password: configs.RabbitMQ.Password,
+		Host:     configs.Rabbitmq.Host,
+		User:     configs.Rabbitmq.User,
+		Password: configs.Rabbitmq.Password,
 	})
 	if err != nil {
 		return fmt.Errorf("new rabbitmq client: %w", err)
@@ -214,6 +215,7 @@ func run() error {
 		MaxFailedTasksRetry:         configs.Scheduler.MaxFailedTasksRetries,
 		MaxTimeForTaskUpdates:       configs.Scheduler.MaxTimeForTaskUpdates,
 		MaxTimeForSchedulerShutdown: configs.Scheduler.MaxTimeForGraceFullShutdown,
+		MaxTimeForTaskExecution:     configs.Scheduler.MaxTimeForTaskExecution,
 	})
 
 	if err != nil {
