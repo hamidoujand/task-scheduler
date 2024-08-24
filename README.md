@@ -36,7 +36,7 @@ To set up the Task Runner Service locally, follow these steps:
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/hamidoujand/task-scheduler.git
-   cd task-runner-service
+   cd task-scheduler
 
 2. **Download Docker Images**: Use the provided Makefile to download the necessary Docker images
    ```bash
