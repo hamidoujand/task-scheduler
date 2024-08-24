@@ -226,6 +226,8 @@ func (s *Scheduler) submitTask(tsk task.Task) error {
 
 		dockerArgs := []string{builder.String()}
 
+		s.logger.Info("executer", "status", fmt.Sprintf("executing task with id %s", tsk.Id))
+
 		output, err := docker.RunCommand(ctx, tsk.Image, tsk.Command, dockerArgs, tsk.Args)
 
 		if err != nil {
@@ -441,6 +443,7 @@ func (s *Scheduler) handleFailedMessage(msg amqp091.Delivery) {
 		s.logger.Error("handleFailedMessage", "status", "failed to update task inside of task service", "msg", err)
 		return
 	}
+	s.logger.Info("handleFailedMessage", "status", fmt.Sprintf("task with id %s failed", tsk.Id))
 }
 
 func (s *Scheduler) handleSuccessMessage(msg amqp091.Delivery) {
@@ -468,6 +471,8 @@ func (s *Scheduler) handleSuccessMessage(msg amqp091.Delivery) {
 		s.logger.Error("handleSuccessMessage", "status", "failed to update task inside of task service", "msg", err)
 		return
 	}
+	//log message
+	s.logger.Info("handleSuccessMessage", "status", fmt.Sprintf("task with id %s completed", tsk.Id))
 }
 
 func (s *Scheduler) removeExecuter(exId string) {

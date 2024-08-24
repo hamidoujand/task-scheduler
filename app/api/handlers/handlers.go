@@ -77,7 +77,6 @@ func RegisterRoutes(conf Config) (*web.App, error) {
 		ActiveKID:    conf.ActiveKID,
 		TokenAge:     conf.TokenAge,
 	}
-
 	//redisRepo
 	redisR := redisRepo.NewRepository(conf.RedisClient)
 
@@ -145,21 +144,20 @@ func RegisterRoutes(conf Config) (*web.App, error) {
 
 	//==============================================================================
 	//users
-	app.HandleFunc(http.MethodPost, version, "/api/users", userHandler.CreateUser,
+	app.HandleFunc(http.MethodPost, version, "/api/users/", userHandler.CreateUser,
 		mid.Authenticate(auth),
 		mid.Authorized(auth, user.RoleAdmin),
 	)
 
-	app.HandleFunc(http.MethodGet, version, "/api/users/{id}", userHandler.GetUserById)
-	app.HandleFunc(http.MethodPut, version, "/api/users/{id}", userHandler.UpdateUser, mid.Authenticate(auth))
-	app.HandleFunc(http.MethodDelete, version, "/api/users/{id}", userHandler.DeleteUserById, mid.Authenticate(auth))
+	app.HandleFunc(http.MethodPost, version, "/api/users/login", userHandler.Login)
 	app.HandleFunc(http.MethodPost, version, "/api/users/signup", userHandler.Signup)
-
-	app.HandleFunc(http.MethodPut, version, "/api/users/role", userHandler.UpdateRole,
+	app.HandleFunc(http.MethodPut, version, "/api/users/role/{id}", userHandler.UpdateRole,
 		mid.Authenticate(auth),
 		mid.Authorized(auth, user.RoleAdmin))
 
-	app.HandleFunc(http.MethodPost, version, "/api/users/login", userHandler.Login)
+	app.HandleFunc(http.MethodGet, version, "/api/users/{id}", userHandler.GetUserById)
+	app.HandleFunc(http.MethodPut, version, "/api/users/{id}", userHandler.UpdateUser, mid.Authenticate(auth))
+	app.HandleFunc(http.MethodDelete, version, "/api/users/{id}", userHandler.DeleteUserById, mid.Authenticate(auth))
 
 	return app, nil
 }

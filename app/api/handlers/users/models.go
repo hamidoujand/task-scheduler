@@ -82,16 +82,22 @@ type UpdateUser struct {
 	PasswordConfirm *string `json:"passowordConfirm" validate:"omitempty,eqfield=Password"`
 }
 
-func (u UpdateUser) toServiceUpdateUser() user.UpdateUser {
+func (u UpdateUser) toServiceUpdateUser() (user.UpdateUser, error) {
+	var email *mail.Address
+	if u.Email != nil {
+		var err error
+		email, err = mail.ParseAddress(*u.Email)
+		if err != nil {
+			return user.UpdateUser{}, fmt.Errorf("parse email address: %w", err)
+		}
+	}
+
 	return user.UpdateUser{
-		Name: u.Name,
-		Email: &mail.Address{
-			Name:    *u.Name,
-			Address: *u.Email,
-		},
+		Name:     u.Name,
+		Email:    email,
 		Password: u.Password,
 		Enabled:  u.Enabled,
-	}
+	}, nil
 }
 
 // UpdateRole represents required data for updating roles

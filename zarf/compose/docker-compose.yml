@@ -1,0 +1,115 @@
+version: '3.8'
+
+services: 
+  postgres:
+    image: postgres:16.3
+    container_name: tasks_postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'  # Limit to 1 core
+    restart: always 
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      default:
+        aliases:
+          - postgres-svc  
+  rabbitmq:
+    image: rabbitmq:3.13.6
+    container_name: tasks_rabbitmq
+    ports:
+      - "5672:5672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: '512m'
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics status"]
+      interval: 60s
+      timeout: 15s
+      retries: 5
+  redis:
+    image: redis:7.4.0
+    container_name: tasks_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: '512m'
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+  tasks:
+      image: ${IMAGE_NAME}
+      container_name: tasks
+      user: "root"  # Set this to the UID of a user in the host's docker group
+      ports:
+        - "8000:8000"
+      environment:
+        TASKS_DB_USER: postgres
+        TASKS_DB_PASSWORD: postgres
+        TASKS_DB_HOST: postgres
+        TASKS_DB_DISABLE_TLS: "true"
+        TASKS_REDIS_HOST: redis:6379
+        TASKS_REDIS_PASSWORD: ""
+        TASKS_RABBITMQ_HOST: rabbitmq
+        TASKS_RABBITMQ_USER: guest
+        TASKS_RABBITMQ_PASSWORD: guest
+        GOMAXPROCS: 1
+        GOGC: "off"
+        GOMEMLIMIT: 512MiB
+      deploy:
+        resources:
+          limits:
+            cpus: '0.5'
+            memory: '512m'
+      restart: always
+      depends_on:
+      - postgres
+      - rabbitmq
+      - redis
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock  # Mount the Docker socket directly
+
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${TEMP_DIR}/postgres_data  # Use a temp directory
+      o: bind      
+  rabbitmq_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${TEMP_DIR}/rabbitmq_data  
+      o: bind
+
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${TEMP_DIR}/redis_data  
+      o: bind      

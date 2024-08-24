@@ -1,37 +1,37 @@
+# Stage 1: Build the docker-cli
+FROM alpine:3.20 AS docker-cli
+RUN apk add --no-cache docker-cli
+
+# Stage 2: Build your application
 FROM golang:1.23.0 AS build
 
-# disable cgo 
+# Disable cgo 
 ENV CGO_ENABLED=0
 
-# define args that can be passed when building image
+# Define args that can be passed when building image
 ARG BUILD 
 
-# since we aredoing vendoring, copy everything into /service 
+# Since we are doing vendoring, copy everything into /service 
 COPY . /service 
 
 WORKDIR /service/app/api/
 
-# build tasks bin 
+# Build tasks binary 
 RUN go build -ldflags "-X main.build=${BUILD}" 
 
-
-# run bin inside Alpine
+# Stage 3: Create the final image
 FROM alpine:3.20
 
-# create a new system group for services and daemons and create a system user that only allowed to run services 
-# for reducing security risks inside of the container .
-RUN addgroup -g 1000 -S tasks && adduser -u 1000 -h /service -G tasks -S tasks 
+# Copy docker-cli binary from the docker-cli stage
+COPY --from=docker-cli /usr/bin/docker /usr/bin/docker
 
-#copy dev-auth-key 
-COPY --from=build --chown=tasks:tasks /service/zarf/keys/. /service/zarf/keys/.
-# copy bin 
-COPY --from=build --chown=tasks:tasks /service/app/api/api /service/api 
+# Copy RSA key used for development only
+COPY --from=build /service/zarf/keys/. /service/zarf/keys/.
+
+# Copy binary 
+COPY --from=build /service/app/api/api /service/api 
 
 WORKDIR /service
 
-USER tasks
-
+# Run the container as root
 CMD [ "./api" ]
-
-
-

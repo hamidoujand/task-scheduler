@@ -7,6 +7,8 @@ VERSION  := 0.0.1
 APP_NAME := tasks
 IMAGE_NAME := $(APP_NAME):$(VERSION)
 NAMESPACE:= tasks-system
+TEMP_DIR  := ./temp
+COMPOSE_FILE := zarf/compose/docker-compose.yml  # Path to docker-compose file
 
 ### Downlaod images 
 docker-pull:
@@ -19,7 +21,7 @@ docker-pull:
 
 
 ### Build image
-build: tasks 
+build: tasks
 
 tasks:
 	docker build \
@@ -30,52 +32,25 @@ tasks:
 
 
 #===============================================================================
-# K8S 
-dev-apply:
-	kubectl apply -f zarf/k8s/base/namespace.yml
-	kubectl apply -f zarf/k8s/dev/postgres/postgres-statefulset.yml
-	kubectl rollout status --namespace=$(NAMESPACE) --watch --timeout=120s sts/postgres-sts
-
-	kubectl apply -f zarf/k8s/dev/rabbitmq/rabbitmq-statefulset.yml
-	kubectl rollout status --namespace=$(NAMESPACE) --watch --timeout=120s sts/rabbitmq-sts
-
-	kubectl apply -f zarf/k8s/dev/redis/redis-statefulset.yml	
-	kubectl rollout status --namespace=$(NAMESPACE) --watch --timeout=120s sts/redis-sts
-
-	kubectl apply -f zarf/k8s/dev/tasks/tasks-configmap.yml
-	kubectl apply -f zarf/k8s/dev/tasks/tasks-deployment.yml 
-
-dev-delete-services:
-	kubectl delete -f zarf/k8s/dev/postgres/postgres-statefulset.yml
-	kubectl delete -f zarf/k8s/dev/rabbitmq/rabbitmq-statefulset.yml 
-	kubectl delete -f zarf/k8s/dev/redis/redis-statefulset.yml	
-	kubectl delete -f zarf/k8s/dev/tasks/tasks-configmap.yml
-	kubectl delete -f zarf/k8s/dev/tasks/tasks-deployment.yml 
-
-	kubectl delete -f zarf/k8s/base/namespace.yml
-
-dev-status:
-	kubectl get pods -n tasks-system -w
-
-dev-restart:
-	kubectl rollout restart deployment tasks-depl --namespace=$(NAMESPACE)
-
-dev-update: build dev-restart
-
-dev-update-apply: build dev-apply
-
-dev-logs:
-	kubectl logs --namespace=$(NAMESPACE) -l app=tasks --all-containers=true -f --tail=100 --max-log-requests=6
-
-dev-logs-db:
-	kubectl logs --namespace=$(NAMESPACE) -l app=postgres-sts --all-containers=true -f --tail=100
-
-
-#===============================================================================
 # Tests 
 test: 
 	CGO_ENABLED=0 go test -timeout=5m -count=1 ./...
 
+
+up:
+	mkdir -p $(TEMP_DIR)/postgres_data
+	mkdir -p $(TEMP_DIR)/rabbitmq_data
+	mkdir -p $(TEMP_DIR)/redis_data
+	# Set the TEMP_DIR environment variable and run docker-compose up
+	TEMP_DIR=$(TEMP_DIR) IMAGE_NAME=$(IMAGE_NAME) docker-compose -f $(COMPOSE_FILE) up --remove-orphans -d 
+
+down:
+	docker-compose -f $(COMPOSE_FILE) down
+clean:
+	rm -rf $(TEMP_DIR)
+
+logs:
+	docker-compose -f $(COMPOSE_FILE) logs -f tasks
 
 tidy:
 	go mod tidy 

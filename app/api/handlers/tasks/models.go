@@ -16,8 +16,8 @@ type Task struct {
 	Image       string            `json:"image"`
 	Environment map[string]string `json:"environment"`
 	Status      string            `json:"status"`
-	Result      string            `json:"result"`
-	ErrMessage  string            `json:"errorMsg"`
+	Result      string            `json:"result,omitempty"`
+	ErrMessage  string            `json:"errorMsg,omitempty"`
 	ScheduledAt time.Time         `json:"scheduledAt"`
 	CreatedAt   time.Time         `json:"createdAt"`
 	UpdatedAt   time.Time         `json:"updatedAt"`
@@ -43,8 +43,8 @@ func fromDomainTask(t task.Task) Task {
 		Result:      t.Result,
 		ErrMessage:  t.ErrMessage,
 		ScheduledAt: t.ScheduledAt,
-		CreatedAt:   t.CreatedAt,
-		UpdatedAt:   t.UpdatedAt,
+		CreatedAt:   t.CreatedAt.Local(),
+		UpdatedAt:   t.UpdatedAt.Local(),
 	}
 }
 

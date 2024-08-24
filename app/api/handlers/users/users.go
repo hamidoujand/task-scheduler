@@ -146,10 +146,14 @@ func (h *Handler) UpdateUser(ctx context.Context, w http.ResponseWriter, r *http
 		return errs.NewAppInternalErr(err)
 	}
 
-	//update it
-	updated, err := h.UsersService.UpdateUser(ctx, uu.toServiceUpdateUser(), fetched)
+	suu, err := uu.toServiceUpdateUser()
 	if err != nil {
-		errs.NewAppInternalErr(err)
+		return errs.NewAppError(http.StatusBadRequest, err.Error())
+	}
+	//update it
+	updated, err := h.UsersService.UpdateUser(ctx, suu, fetched)
+	if err != nil {
+		return errs.NewAppInternalErr(err)
 	}
 
 	return web.Respond(ctx, w, http.StatusOK, toAppUser(updated))
